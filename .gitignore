@@ -127,3 +127,13 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+dataset/
+reference/
+学位论文相关资料/
+*.png
+*.pdf
+*.zip
+*.docx
+*.pptx
+*.doc
