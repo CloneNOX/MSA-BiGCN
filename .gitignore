@@ -136,4 +136,8 @@ reference/
 *.zip
 *.docx
 *.pptx
+<<<<<<< HEAD
 *.doc
+=======
+*.doc
+>>>>>>> ee6c39ff615b2a73c5260e5fa46dab47bf2ba095
