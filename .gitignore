@@ -270,6 +270,7 @@ dmypy.json
 # Pyre type checker
 .pyre/
 
+.vscode/
 reference/
 glove/
 PHEME/
