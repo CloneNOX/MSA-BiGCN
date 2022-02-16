@@ -284,6 +284,7 @@ semeval2017-task8-test-data/
 *.pptx
 *.tar
 *.txt
+*.tar.bz2
 <<<<<<< HEAD
 *.doc
 =======
