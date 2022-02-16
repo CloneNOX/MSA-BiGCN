@@ -270,8 +270,10 @@ dmypy.json
 # Pyre type checker
 .pyre/
 
-dataset/
 reference/
+glove/
+PHEME/
+oldPHEME/
 学位论文相关资料/
 dataset/semeval2017-task8/semeval2017-task8-dataset/
 dataset/semeval2017-task8-test-data/
@@ -281,6 +283,7 @@ dataset/semeval2017-task8-test-data/
 *.docx
 *.pptx
 *.tar
+*.txt
 <<<<<<< HEAD
 *.doc
 =======
