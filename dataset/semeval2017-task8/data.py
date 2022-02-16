@@ -14,6 +14,8 @@ EVENT_NAME = ['charliehebdo', 'ebola-essien', 'ferguson', 'germanwings-crash', '
 
 label2IndexRumor = {'unverified': 0, 'true': 1, 'false': 2}
 label2IndexStance = {'support': 0, 'query': 1, 'deny': 2, 'comment': 3}
+index2LabelRumor = {'0': 'unverified', '1': 'true', '2': 'false'}
+index2LabelStance = {'0': 'support', '1': 'query', '2': 'deny', '3': 'comment'}
 
 # 根据semeval2017 task8数据集的立场标签，获取post的ID标识和立场标签
 def readPostIdAndTag():
