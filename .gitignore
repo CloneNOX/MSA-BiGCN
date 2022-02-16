@@ -129,7 +129,6 @@ dmypy.json
 # Pyre type checker
 .pyre/
 
-dataset/
 reference/
 hice/
 学位论文相关资料/
@@ -276,8 +275,8 @@ glove/
 PHEME/
 oldPHEME/
 学位论文相关资料/
-dataset/semeval2017-task8/semeval2017-task8-dataset/
-dataset/semeval2017-task8-test-data/
+semeval2017-task8-dataset/
+semeval2017-task8-test-data/
 *.png
 *.pdf
 *.zip
@@ -285,6 +284,7 @@ dataset/semeval2017-task8-test-data/
 *.pptx
 *.tar
 *.txt
+*.tar.bz2
 <<<<<<< HEAD
 *.doc
 =======
