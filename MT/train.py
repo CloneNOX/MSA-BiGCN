@@ -55,21 +55,22 @@ def main():
                      numStanceClass=len(label2IndexStance))
     else:
         return
-    loss_func = torch.nn.CrossEntropyLoss(reduction='sum')
-    optimizer = optim.Adagrad(model.parameters(), lr=args.lr, weight_decay=args.weightDecay) # 优化器，原文使用AdaGrad
     f = open(args.logName, 'w')
     if 'cuda' in args.device:
         device = torch.device((args.device if torch.cuda.is_available() else 'cpu'))
         if torch.cuda.is_available():
-            f.write('train with model: ' + args.modelType + 'on device: cuda\n')
+            f.write('train with model: ' + args.modelType + ' on device: cuda\n')
         else:
-            f.write('train with model: ' + args.modelType + 'on device: cpu\n')
+            f.write('train with model: ' + args.modelType + ' on device: cpu\n')
     else:
         device = torch.device('cpu')
-        f.write('train with model: ' + args.modelType + 'on device: cpu\n')
+        f.write('train with model: ' + args.modelType + ' on device: cpu\n')
     f.close()
     model = model.set_device(device)
     print(model)
+
+    loss_func = torch.nn.CrossEntropyLoss(reduction='sum').to(device)
+    optimizer = optim.Adagrad(model.parameters(), lr=args.lr, weight_decay=args.weightDecay) # 优化器，原文使用AdaGrad
     
     start = 1
     minLossRumor = float('inf')
@@ -89,7 +90,7 @@ def main():
             f.write('working on task 1(rumor detection)\n')
             model.train()
             for i in range(len(trainSet)):
-                x = trainSet[i][0].to(device).to(device)
+                x = trainSet[i][0].to(device)
                 rumorTag = trainSet[i][1].to(device)
                 optimizer.zero_grad()
                 
