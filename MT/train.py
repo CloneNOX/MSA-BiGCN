@@ -74,13 +74,14 @@ def main():
     
     start = 1
     minLossRumor = float('inf')
+    minLossStance = float('inf')
     maxMicroF1Rumor = float('-inf')
     maxMacroF1Rumor = float('-inf')
-    minLossStance = float('inf')
     maxMicroF1Stance = float('-inf')
     maxMacroF1Stance = float('-inf')
     maxAccuracyRumor = float('-inf')
     maxAccuracyStance = float('-inf')
+
     for epoch in range(start, args.epoch + 1):
         f = open(args.logName, 'a')
         f.write('[epoch {:>3d}] '.format(epoch))
@@ -160,7 +161,7 @@ def main():
             f.write('average loss: {:f}, accuracy: {:f}, micro-f1: {:f}, macro-f1: {:f}\n'.format(
                 totalLossRumor / len(testIndex), accuracyRumor, microF1Rumor, macroF1Rumor
             ))
-            f.write('rumor analyze:\n')
+            f.write('stance analyze:\n')
             f.write('average loss: {:f}, accuracy: {:f}, micro-f1: {:f}, macro-f1: {:f}\n'.format(
                 totalLossStance / len(testIndex), accuracyStance, microF1Stance, macroF1Stance
             ))
@@ -181,7 +182,7 @@ def main():
     f.write('min loss: {:f}, max accuracy: {:f}, max micro-f1: {:f}, max macro-f1: {:f}\n'.format(
         minLossRumor, maxAccuracyRumor, maxMicroF1Rumor, maxMacroF1Rumor
     ))
-    f.write('rumor analyze:\n')
+    f.write('stance analyze:\n')
     f.write('min loss: {:f}, max accuracy: {:f}, max micro-f1: {:f}, max macro-f1: {:f}\n'.format(
         minLossStance, maxAccuracyStance, maxMicroF1Stance, maxMacroF1Stance
     ))
