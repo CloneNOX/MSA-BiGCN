@@ -21,8 +21,8 @@ parser.add_argument('--gruLayer', type=int, default=2,\
                     help='num of GRU module layer, default: 2')
 parser.add_argument('--bidirectional', type=bool, default=False,\
                     help='whether use bi-directional GRU, default: False')
-parser.add_argument('--modelType', type=str, default='mtes',\
-                    help='select model type between mtus and mtes, default: mtes')
+parser.add_argument('--modelType', type=str, default='mtus',\
+                    help='select model type between mtus and mtes, default: mtus')
 # dataset parameters
 parser.add_argument('--dataPath', type=str, default='../dataset/semeval2017-task8/',\
                     help='path to semeval2017 task8 dataset, default: ../dataset/semeval2017-task8/')
@@ -35,6 +35,8 @@ parser.add_argument('--epoch', type=int, default=100,\
                     help='epoch to train, default: 100')
 parser.add_argument('--device', type=str, default='cpu',\
                     help='select device(cuda:0/cpu), default: cpu')
+parser.add_argument('--logName', type=str, default='log.txt',\
+                    help='log file name, default: log.txt')
 
 
 def main():
@@ -55,15 +57,17 @@ def main():
         return
     loss_func = torch.nn.CrossEntropyLoss(reduction='sum')
     optimizer = optim.Adagrad(model.parameters(), lr=args.lr, weight_decay=args.weightDecay) # 优化器，原文使用AdaGrad
+    f = open(args.logName, 'w')
     if 'cuda' in args.device:
         device = torch.device((args.device if torch.cuda.is_available() else 'cpu'))
-        if torch.cuda.is_available()
-            print('train with model: ' + args.modelType + 'on device: cuda')
+        if torch.cuda.is_available():
+            f.write('train with model: ' + args.modelType + 'on device: cuda\n')
         else:
-            print('train with model: ' + args.modelType + 'on device: cpu')
+            f.write('train with model: ' + args.modelType + 'on device: cpu\n')
     else:
         device = torch.device('cpu')
-        print('train with model: ' + args.modelType + 'on device: cpu')
+        f.write('train with model: ' + args.modelType + 'on device: cpu\n')
+    f.close()
     model = model.set_device(device)
     print(model)
     
@@ -75,13 +79,14 @@ def main():
     maxMicroF1Stance = float('-inf')
     maxMacroF1Stance = float('-inf')
     for epoch in range(start, args.epoch + 1):
-        print('[epoch {:>3d}]'.format(epoch), end=" ")
+        f = open(args.logName, 'a')
+        f.write('[epoch {:>3d}] '.format(epoch))
         shuffle(trainSet)# 打乱训练集的顺序            
         totalLoss = 0.
 
         # 训练模型
-        if randint % 2 == 0: # 训练M1
-            print('working on task 1(rumor detection)')
+        if randint(0, 2) % 2 == 0: # 训练M1
+            f.write('working on task 1(rumor detection)\n')
             model.train()
             for i in range(len(trainSet)):
                 x = trainSet[i][0].to(device).to(device)
@@ -93,9 +98,9 @@ def main():
                 totalLoss += loss
                 loss.backward()
                 optimizer.step()
-            print("average loss: {:.4f}".format(totalLoss / len(trainSet)))
+            f.write("average loss: {:.4f} \n".format(totalLoss / len(trainSet)))
         else: # 训练M2
-            print('working on task 2(stance analyze)')
+            f.write('working on task 2(stance analyze)\n')
             model.train()
             totalLoss = 0.
 
@@ -109,11 +114,11 @@ def main():
                 totalLoss += loss
                 loss.backward()
                 optimizer.step()
-            print("average loss: {:.4f}".format(totalLoss / len(trainSet)))
+            f.write("average loss: {:.4f}\n".format(totalLoss / len(trainSet)))
         
         # 测试
         if epoch % 5 == 0: # 每5个eopch进行一次测试，随机抽取训练集中的数据
-            print('==========\nmodel testing')
+            f.write('==========\nmodel testing\n')
             model.eval()
             testIndex = [randint(0, len(trainSet)) for i in range(len(trainSet) // 5)]
             rumorTrue = []
@@ -123,7 +128,7 @@ def main():
             totalLossRumor = 0.
             totalLossStance = 0.
             
-            print('testing on both task')
+            f.write('testing on both task\n')
             for i in testIndex:
                 x = trainSet[i][0].to(device)
                 rumorTag = trainSet[i][1].to(device)
@@ -146,12 +151,12 @@ def main():
             macroF1Rumor = f1_score(rumorTrue, rumorPre, labels=[0,1,2], average='macro')
             microF1Stance = f1_score(stanceTrue, stancePre, labels=[0,1,2], average='micro')
             macroF1Stance = f1_score(stanceTrue, stancePre, labels=[0,1,2], average='macro')
-            print('rumor detection:')
-            print('average loss: {:f}, micro-f1: {:f}, macro-f1: {:f}'.format(
+            f.write('rumor detection:\n')
+            f.write('average loss: {:f}, micro-f1: {:f}, macro-f1: {:f}\n'.format(
                 totalLossRumor / len(testIndex), microF1Rumor, macroF1Rumor
             ))
-            print('rumor analyze:')
-            print('average loss: {:f}, micro-f1: {:f}, macro-f1: {:f}'.format(
+            f.write('rumor analyze:\n')
+            f.write('average loss: {:f}, micro-f1: {:f}, macro-f1: {:f}\n'.format(
                 totalLossStance / len(testIndex), microF1Stance, macroF1Stance
             ))
             minLossRumor = min(minLossRumor, totalLossRumor / len(testIndex))
@@ -160,20 +165,21 @@ def main():
             maxMacroF1Stance = max(maxMacroF1Stance, macroF1Stance)
             maxMicroF1Rumor = max(maxMicroF1Rumor, microF1Rumor)
             maxMicroF1Stance = max(maxMicroF1Stance, microF1Stance)
-            print('==========')
-    print('====================')
-    print('rumor analyze:')
-    print('min loss: {:f}, max micro-f1: {:f}, max macro-f1: {:f}'.format(
+            f.write('==========')
+        f.close()
+    f = open(args.logName, 'a')
+    f.write('====================\n')
+    f.write('train set test result')
+    f.write('rumor analyze:\n')
+    f.write('min loss: {:f}, max micro-f1: {:f}, max macro-f1: {:f}\n'.format(
         minLossRumor, maxMicroF1Rumor, maxMacroF1Rumor
     ))
-    print('rumor analyze:')
-    print('average loss: {:f}, micro-f1: {:f}, macro-f1: {:f}'.format(
+    f.write('rumor analyze:\n')
+    f.write('average loss: {:f}, micro-f1: {:f}, macro-f1: {:f}\n'.format(
         minLossStance, maxMicroF1Stance, maxMacroF1Stance
     ))
-
+    f.close()
                 
-            
-
 def getTrainSet(dataSetPath:str):
     with open(dataSetPath + 'trainSet.json', 'r') as f:
         content = f.read()
@@ -182,29 +188,33 @@ def getTrainSet(dataSetPath:str):
     rumorTags = []
     stanceTags = []
     for threadId in trainSet['threadIds']:
-        thread = {str(trainSet['posts'][threadId]['time']): trainSet['posts'][threadId]['text']}
+        thread = []
+        stanceTag = []
         structure = trainSet['structures'][threadId]
         ids = flattenStructure(structure)
-        stanceTag = []
+        time2Id = {}
         for id in ids:
             if id in trainSet['posts']:
-                thread[str(trainSet['posts'][id]['time'])] = trainSet['posts'][id]['text']
-                stanceTag.append(trainSet['label2IndexStance'][trainSet['stanceTag'][id]])
+                time2Id[str(trainSet['posts'][id]['time'])] = id
         # post按照时间先后排序
-        thread = sorted(thread.items(), key=lambda d: d[0])
+        time2Id = sorted(time2Id.items(), key=lambda d: d[0])
+        for (time, id) in time2Id:
+            if id in trainSet['posts'] and id in trainSet['stanceTag']:
+                thread.append(trainSet['posts'][id]['text'])
+                stanceTag.append(trainSet['label2IndexStance'][trainSet['stanceTag'][id]])
         threads.append(thread)
         rumorTags.append(torch.LongTensor([trainSet['label2IndexRumor'][trainSet['rumorTag'][threadId]]]))
         stanceTags.append(torch.LongTensor(stanceTag))
     cropus = []
     for thread in threads:
-        for _, text in thread:
+        for text in thread:
             cropus.append(text)
     tfidf_vec = TfidfVectorizer()
     tfidf_matrix = tfidf_vec.fit_transform(cropus).toarray()
     counter = 0
     for i in range(len(threads)):
         tfidf = []
-        for _, _ in threads[i]:
+        for _ in threads[i]:
             tfidf.append(tfidf_matrix[counter])
             counter += 1
         threads[i] = torch.Tensor(tfidf)

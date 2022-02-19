@@ -12,6 +12,7 @@ class MTUS(nn.Module):
         self.hiddenDim = hiddenDim
         self.batchSize = batchSize
         self.bidirectional = bidirectional
+        self.D = 2 if self.bidirectional else 1
         
         # embedding使用线性层来把tf-idf向量转换成句嵌入
         self.embeddingRumor = nn.Linear(inputDim, embeddingDim)
@@ -19,28 +20,30 @@ class MTUS(nn.Module):
         
         # 共享GRU层
         self.shareGRU = nn.GRU(embeddingDim, hiddenDim, numGRULayer, bidirectional = self.bidirectional)
-        self.h0 = nn.Parameter(torch.randn((numGRULayer, self.batchSize, hiddenDim)))
+        self.h0 = nn.Parameter(torch.randn((self.D * numGRULayer, self.batchSize, hiddenDim)))
 
         # 把GRU的隐状态映射成概率
-        self.vRumor = nn.Linear(hiddenDim, numRumorClass)
-        self.v1Stance = nn.Linear(hiddenDim, numStanceClass)
-        self.vStance = nn.Linear(hiddenDim, numStanceClass)
-
+        self.vRumor = nn.Linear(self.D * hiddenDim, numRumorClass)
+        self.vStance = nn.Linear(self.D * 2 * hiddenDim, numStanceClass) # stance的预测需要拼接第一句的隐状态
+        
     # 训练集前向传递，返回对特定任务的概率向量/矩阵
     def forwardRumor(self, sentences: torch.Tensor):
-        seqLen = sentences.size()[0]
+        seqLen = sentences.size()[0] # 取tensor size的第一维，是本次训练的thread的长度
         embeddings = self.embeddingRumor(sentences).view(seqLen, self.batchSize, self.embeddingDim) # view是为了适配gru的输入样式
-        gruOut, _ = self.shareGRU(embeddings, self.h0) # hs(seqLen, batch, numDirection * hiddenDim), ht(numLayers*numDirections, batch, hiddenDim)
-        ht = gruOut[ht.size()[0] - 1].view(self.batchSize, self.hiddenDim) # 取出最后一层的隐状态
+        # hs(seqLen, batch, numDirection * hiddenDim), ht(numLayers*numDirections, batch, hiddenDim)
+        # 舍弃掉ht的输出是因为下一个thread和这次训练的thread是独立的，不应该用本次的隐状态作为其h0输入
+        gruOut, _ = self.shareGRU(embeddings, self.h0) 
+        ht = gruOut[gruOut.size()[0] - 1].view(self.batchSize, self.D * self.hiddenDim) # 取出最后一层的隐状态
         p = self.vRumor(ht)
         return p # 返回的概率矩阵是包含batch维度的size():(batch, numDirection)
     
     def forwardStance(self, sentences: torch.Tensor):
         seqLen = sentences.size()[0]
         embeddings = self.embeddingRumor(sentences).view(seqLen, self.batchSize, self.embeddingDim)
-        hs, _ = self.shareGRU(embeddings, self.h0)# hs(seqLen, batch, numDirection * hiddenDim)
-        ps = self.v1Stance(hs[0]) + self.vStance(hs)
-        return ps
+        gruOut, _ = self.shareGRU(embeddings, self.h0) # hs(seqLen, batch, numDirection * hiddenDim)
+        h1Repeat = gruOut[0].repeat(seqLen, 1, 1) # h1Repeat(seqLen, batch, numDirection * hiddenDim)
+        p = self.vStance(torch.cat([h1Repeat, gruOut], dim=2))
+        return p
 
     # 更换计算设备
     def set_device(self, device: torch.device) -> torch.nn.Module:
