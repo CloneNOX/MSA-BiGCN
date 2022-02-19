@@ -86,7 +86,7 @@ def main():
         totalLoss = 0.
 
         # 训练模型
-        if randint(0, 2) % 2 == 0: # 训练M1
+        if randint(0, 1) % 2 == 0: # 训练M1
             f.write('working on task 1(rumor detection)\n')
             model.train()
             for i in range(len(trainSet)):
@@ -135,16 +135,16 @@ def main():
                 rumorTag = trainSet[i][1].to(device)
                 stanceTag = trainSet[i][2].to(device)
                 rumorTrue += trainSet[i][1].tolist()
-                stanceTrue = trainSet[i][2].tolist()
+                stanceTrue += trainSet[i][2].tolist()
                 
                 pRumor = model.forwardRumor(x)
-                pStance = model.forwardStance(x).view(-1, len(trainSet['label2IndexStance']))
+                pStance = model.forwardStance(x).view(-1, len(label2IndexStance))
                 loss = loss_func(pRumor, rumorTag)
                 totalLossRumor += loss
                 loss = loss_func(pStance, stanceTag)
                 totalLossStance += loss
                 pRumor = softmax(pRumor, 1)
-                rumorPre += pRumor.max(dim=1)[1].tolise()
+                rumorPre += pRumor.max(dim=1)[1].tolist()
                 pStance = softmax(pStance, 1)
                 stancePre += pStance.max(dim=1)[1].tolist()
             
@@ -166,11 +166,11 @@ def main():
             maxMacroF1Stance = max(maxMacroF1Stance, macroF1Stance)
             maxMicroF1Rumor = max(maxMicroF1Rumor, microF1Rumor)
             maxMicroF1Stance = max(maxMicroF1Stance, microF1Stance)
-            f.write('==========')
+            f.write('==========\n')
         f.close()
     f = open(args.logName, 'a')
     f.write('====================\n')
-    f.write('train set test result')
+    f.write('train set test result\n')
     f.write('rumor analyze:\n')
     f.write('min loss: {:f}, max micro-f1: {:f}, max macro-f1: {:f}\n'.format(
         minLossRumor, maxMicroF1Rumor, maxMacroF1Rumor
