@@ -57,7 +57,10 @@ def main():
     optimizer = optim.Adagrad(model.parameters(), lr=args.lr, weight_decay=args.weightDecay) # 优化器，原文使用AdaGrad
     if 'cuda' in args.device:
         device = torch.device((args.device if torch.cuda.is_available() else 'cpu'))
-        print('train with model: ' + args.modelType + 'on device: cuda')
+        if torch.cuda.is_available()
+            print('train with model: ' + args.modelType + 'on device: cuda')
+        else:
+            print('train with model: ' + args.modelType + 'on device: cpu')
     else:
         device = torch.device('cpu')
         print('train with model: ' + args.modelType + 'on device: cpu')
