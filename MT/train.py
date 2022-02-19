@@ -1,10 +1,11 @@
 import json
 import torch
+import argparse
+import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics import f1_score
 from torch import optim
 from torch.nn.functional import softmax
-import argparse
 from model import *
 from defaultParameter import*
 from utils import *
@@ -37,7 +38,6 @@ parser.add_argument('--device', type=str, default='cpu',\
                     help='select device(cuda:0/cpu), default: cpu')
 parser.add_argument('--logName', type=str, default='log.txt',\
                     help='log file name, default: log.txt')
-
 
 def main():
     args = parser.parse_args()
@@ -79,6 +79,8 @@ def main():
     minLossStance = float('inf')
     maxMicroF1Stance = float('-inf')
     maxMacroF1Stance = float('-inf')
+    maxAccuracyRumor = float('-inf')
+    maxAccuracyStance = float('-inf')
     for epoch in range(start, args.epoch + 1):
         f = open(args.logName, 'a')
         f.write('[epoch {:>3d}] '.format(epoch))
@@ -152,13 +154,15 @@ def main():
             macroF1Rumor = f1_score(rumorTrue, rumorPre, labels=[0,1,2], average='macro')
             microF1Stance = f1_score(stanceTrue, stancePre, labels=[0,1,2], average='micro')
             macroF1Stance = f1_score(stanceTrue, stancePre, labels=[0,1,2], average='macro')
+            accuracyRumor = (np.array(rumorTrue) == np.array(rumorPre)).sum() / len(rumorPre)
+            accuracyStance = (np.array(stanceTrue) == np.array(stancePre)).sum() / len(stancePre)
             f.write('rumor detection:\n')
-            f.write('average loss: {:f}, micro-f1: {:f}, macro-f1: {:f}\n'.format(
-                totalLossRumor / len(testIndex), microF1Rumor, macroF1Rumor
+            f.write('average loss: {:f}, accuracy: {:f}, micro-f1: {:f}, macro-f1: {:f}\n'.format(
+                totalLossRumor / len(testIndex), accuracyRumor, microF1Rumor, macroF1Rumor
             ))
             f.write('rumor analyze:\n')
-            f.write('average loss: {:f}, micro-f1: {:f}, macro-f1: {:f}\n'.format(
-                totalLossStance / len(testIndex), microF1Stance, macroF1Stance
+            f.write('average loss: {:f}, accuracy: {:f}, micro-f1: {:f}, macro-f1: {:f}\n'.format(
+                totalLossStance / len(testIndex), accuracyStance, microF1Stance, macroF1Stance
             ))
             minLossRumor = min(minLossRumor, totalLossRumor / len(testIndex))
             minLossStance = min(minLossStance, totalLossStance / len(testIndex))
@@ -166,18 +170,20 @@ def main():
             maxMacroF1Stance = max(maxMacroF1Stance, macroF1Stance)
             maxMicroF1Rumor = max(maxMicroF1Rumor, microF1Rumor)
             maxMicroF1Stance = max(maxMicroF1Stance, microF1Stance)
+            maxAccuracyRumor = max(maxAccuracyRumor, accuracyRumor)
+            maxAccuracyStance = max(maxAccuracyStance, accuracyStance)
             f.write('==========\n')
         f.close()
     f = open(args.logName, 'a')
     f.write('====================\n')
     f.write('train set test result\n')
     f.write('rumor analyze:\n')
-    f.write('min loss: {:f}, max micro-f1: {:f}, max macro-f1: {:f}\n'.format(
-        minLossRumor, maxMicroF1Rumor, maxMacroF1Rumor
+    f.write('min loss: {:f}, max accuracy: {:f}, max micro-f1: {:f}, max macro-f1: {:f}\n'.format(
+        minLossRumor, maxAccuracyRumor, maxMicroF1Rumor, maxMacroF1Rumor
     ))
     f.write('rumor analyze:\n')
-    f.write('average loss: {:f}, micro-f1: {:f}, macro-f1: {:f}\n'.format(
-        minLossStance, maxMicroF1Stance, maxMacroF1Stance
+    f.write('min loss: {:f}, max accuracy: {:f}, max micro-f1: {:f}, max macro-f1: {:f}\n'.format(
+        minLossStance, maxAccuracyStance, maxMicroF1Stance, maxMacroF1Stance
     ))
     f.close()
                 
