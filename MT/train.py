@@ -121,7 +121,7 @@ def main():
         if epoch % 5 == 0: # 每5个eopch进行一次测试，随机抽取训练集中的数据
             f.write('==========\nmodel testing\n')
             model.eval()
-            testIndex = [randint(0, len(trainSet)) for i in range(len(trainSet) // 5)]
+            testIndex = [randint(0, len(trainSet) - 1) for _ in range(len(trainSet) // 5)]
             rumorTrue = []
             stanceTrue = []
             rumorPre = []
