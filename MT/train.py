@@ -38,6 +38,8 @@ parser.add_argument('--device', type=str, default='cpu',\
                     help='select device(cuda:0/cpu), default: cpu')
 parser.add_argument('--logName', type=str, default='log.txt',\
                     help='log file name, default: log.txt')
+parser.add_argument('--savePath', type=str, default='./model.pt',\
+                    help='path to save model')
 
 def main():
     args = parser.parse_args()
@@ -157,6 +159,14 @@ def main():
             macroF1Stance = f1_score(stanceTrue, stancePre, labels=[0,1,2], average='macro')
             accuracyRumor = (np.array(rumorTrue) == np.array(rumorPre)).sum() / len(rumorPre)
             accuracyStance = (np.array(stanceTrue) == np.array(stancePre)).sum() / len(stancePre)
+            
+
+#==============================================
+# 保存rumor detection任务marco F1最大时的模型
+            if(macroF1Rumor > maxMacroF1Rumor):
+                model.save(args.savePath)
+#==============================================
+            
             f.write('rumor detection:\n')
             f.write('average loss: {:f}, accuracy: {:f}, micro-f1: {:f}, macro-f1: {:f}\n'.format(
                 totalLossRumor / len(testIndex), accuracyRumor, microF1Rumor, macroF1Rumor

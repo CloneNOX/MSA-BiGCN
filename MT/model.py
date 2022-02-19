@@ -53,10 +53,10 @@ class MTUS(nn.Module):
 
     # 保存模型
     def save(self, path: str):
-        pass
+        torch.save(self.state_dict(), path)
     # 加载模型
     def load(self, path: str):
-        pass
+        self.load_state_dict(torch.load(path))
     
 class MTES(nn.Module):
     def __init__(self, embeddingDim: int, hiddenDim: int, inputDim: int, numGRULayer: int, numRumorClass: int, numStanceClass: int, batchSize=1):
