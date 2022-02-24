@@ -109,7 +109,6 @@ class MTES(nn.Module):
         
     def forwardStance(self, sentences: torch.Tensor):
         seqLen = sentences.size()[0]
-        sentence_len = sentences.size()[1]
         embeddings = self.embeddingRumor(sentences).view(seqLen, self.batchSize, self.embeddingDim)
         gruShareOut, _ = self.GRUshare(embeddings, self.h0)
         # gruShareOut(seqLen, batch, numDirection * hiddenDim)
