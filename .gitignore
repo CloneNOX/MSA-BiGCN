@@ -1,4 +1,4 @@
-<<<<<<< HEAD
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -285,9 +285,4 @@ semeval2017-task8-test-data/
 *.tar
 *.txt
 *.tar.bz2
-<<<<<<< HEAD
 *.doc
-=======
-*.doc
->>>>>>> ee6c39ff615b2a73c5260e5fa46dab47bf2ba095
->>>>>>> 0cdc5155aa285170ff7dcc4509710e2800d11189
