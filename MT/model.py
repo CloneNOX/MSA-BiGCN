@@ -19,7 +19,7 @@ class MTUS(nn.Module):
         self.embeddingStance = nn.Linear(inputDim, embeddingDim)
         
         # 共享GRU层
-        self.shareGRU = nn.GRU(embeddingDim, hiddenDim, numGRULayer, bidirectional = self.bidirectional)
+        self.shareGRU = nn.GRU(embeddingDim, hiddenDim, numGRULayer, bidirectional=self.bidirectional)
         self.h0 = nn.Parameter(torch.randn((self.D * numGRULayer, self.batchSize, hiddenDim)))
 
         # 把GRU的隐状态映射成概率
@@ -75,17 +75,14 @@ class MTES(nn.Module):
         self.embeddingStance = nn.Linear(inputDim, embeddingDim)
 
         # 共享GRU层
-        self.GRUshare = nn.GRU(embeddingDim, hiddenDim, numGRULayer)
-        self.h0Share = nn.Parameter(torch.randn((numGRULayer, batchSize, hiddenDim)))
+        self.GRUshare = nn.GRU(embeddingDim, hiddenDim, numGRULayer, bidirectional=self.bidirectional)
+        self.h0Share = nn.Parameter(torch.randn((self.D * numGRULayer, batchSize, hiddenDim)))
 
         # 非共享GRU
-        self.GRURumor = nn.GRU(hiddenDim, hiddenDim, numGRULayer)
-        self.GRUStance = nn.GRU(hiddenDim, hiddenDim, numGRULayer)
-        self.h0Rumor = nn.Parameter(torch.randn((numGRULayer, batchSize, hiddenDim)))
-        self.h0Stance = nn.Parameter(torch.randn((numGRULayer, batchSize, hiddenDim)))
-
-        # 共享GRU隐状态接入非共享层的系数
-        self.US2M = nn.Linear(self.D * hiddenDim, embeddingDim)
+        self.GRURumor = nn.GRU(2 * hiddenDim, hiddenDim, numGRULayer, bidirectional=self.bidirectional)
+        self.GRUStance = nn.GRU(2 * hiddenDim, hiddenDim, numGRULayer, bidirectional=self.bidirectional)
+        self.h0Rumor = nn.Parameter(torch.randn((self.D * numGRULayer, batchSize, hiddenDim)))
+        self.h0Stance = nn.Parameter(torch.randn((self.D * numGRULayer, batchSize, hiddenDim)))
 
         # 把GRU的隐状态映射成概率
         self.vRumor = nn.Linear(self.D * hiddenDim, numRumorClass)
@@ -95,11 +92,10 @@ class MTES(nn.Module):
     def forwardRumor(self, sentences: torch.Tensor):
         seqLen = sentences.size()[0]
         embeddings = self.embeddingRumor(sentences).view(seqLen, self.batchSize, self.embeddingDim) # embeddings(sepLen, batch, embeddingDim)   
-        gruShareOut, _ = self.GRUshare(embeddings, self.h0)
-        # gruShareOut(seqLen, batch, numDirection * hiddenDim)
-        
-        hS2M = self.US2M(gruShareOut) # hS2M(sepLen, batch, embeddingDim)
-        gruRumorIn = embeddings + hS2M
+        gruShareOut, _ = self.GRUshare(embeddings, self.h0Share)
+        # gruShareOut(seqLen, batch, numDirection * hiddenDim)\
+
+        gruRumorIn = torch.cat([embeddings, gruShareOut], dim=2)
         gruRumorOut, _ = self.GRURumor(gruRumorIn, self.h0Rumor)
         # gruRumorOut(seqLen, batch, numDirection * hiddenDim)
 
@@ -110,12 +106,11 @@ class MTES(nn.Module):
     def forwardStance(self, sentences: torch.Tensor):
         seqLen = sentences.size()[0]
         embeddings = self.embeddingRumor(sentences).view(seqLen, self.batchSize, self.embeddingDim)
-        gruShareOut, _ = self.GRUshare(embeddings, self.h0)
+        gruShareOut, _ = self.GRUshare(embeddings, self.h0Share)
         # gruShareOut(seqLen, batch, numDirection * hiddenDim)
         
-        hS2M = self.US2M(gruShareOut) # hS2M(sepLen, batch, embeddingDim)
-        gruStanceIn = embeddings + hS2M
-        gruStanceOut, _ = self.GRURumor(gruStanceIn, self.h0Rumor)
+        gruStanceIn = torch.cat([embeddings, gruShareOut], dim=2)
+        gruStanceOut, _ = self.GRUStance(gruStanceIn, self.h0Stance)
         # gruRumorOut(seqLen, batch, numDirection * hiddenDim)
 
         h1 = gruStanceOut[0].repeat(seqLen, 1, 1) # h1(seqLen, batch, numDirection * hiddenDim)

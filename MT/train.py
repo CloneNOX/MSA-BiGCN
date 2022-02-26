@@ -10,6 +10,7 @@ from model import *
 from defaultParameter import*
 from utils import *
 from random import randint, shuffle
+from tqdm import tqdm
 
 parser = argparse.ArgumentParser(description="Training script for MTUS/MTES")
 
@@ -61,7 +62,7 @@ def main():
     if 'cuda' in args.device:
         device = torch.device((args.device if torch.cuda.is_available() else 'cpu'))
         if torch.cuda.is_available():
-            f.write('train with model: ' + args.modelType + ' on device: cuda\n')
+            f.write('train with model: ' + args.modelType + ' on device:' + args.device + '\n')
         else:
             f.write('train with model: ' + args.modelType + ' on device: cpu\n')
     else:
@@ -86,7 +87,7 @@ def main():
 
     for epoch in range(start, args.epoch + 1):
         f = open(args.logName, 'a')
-        f.write('[epoch {:>3d}] '.format(epoch))
+        f.write('[epoch {:d}] '.format(epoch))
         shuffle(trainSet)# 打乱训练集的顺序            
         totalLoss = 0.
 
@@ -94,7 +95,7 @@ def main():
         if randint(0, 1) % 2 == 0: # 训练M1
             f.write('working on task 1(rumor detection)\n')
             model.train()
-            for i in range(len(trainSet)):
+            for i in tqdm(range(len(trainSet)), desc="[epoch {:d}, rumor]".format(epoch), leave=False, ncols=80):
                 x = trainSet[i][0].to(device)
                 rumorTag = trainSet[i][1].to(device)
                 optimizer.zero_grad()
@@ -110,7 +111,7 @@ def main():
             model.train()
             totalLoss = 0.
 
-            for i in range(len(trainSet)):
+            for i in tqdm(range(len(trainSet)), desc="[epoch {:d}, stance]".format(epoch), leave=False, ncols=80):
                 x = trainSet[i][0].to(device)
                 stanceTag = trainSet[i][2].to(device)
                 optimizer.zero_grad()
@@ -135,7 +136,7 @@ def main():
             totalLossStance = 0.
             
             f.write('testing on both task\n')
-            for i in testIndex:
+            for i in tqdm(testIndex, desc="[epoch {:d}, test]".format(epoch), leave=False, ncols=80):
                 x = trainSet[i][0].to(device)
                 rumorTag = trainSet[i][1].to(device)
                 stanceTag = trainSet[i][2].to(device)
@@ -155,8 +156,8 @@ def main():
             
             microF1Rumor = f1_score(rumorTrue, rumorPre, labels=[0,1,2], average='micro')
             macroF1Rumor = f1_score(rumorTrue, rumorPre, labels=[0,1,2], average='macro')
-            microF1Stance = f1_score(stanceTrue, stancePre, labels=[0,1,2], average='micro')
-            macroF1Stance = f1_score(stanceTrue, stancePre, labels=[0,1,2], average='macro')
+            microF1Stance = f1_score(stanceTrue, stancePre, labels=[0,1,2,3], average='micro')
+            macroF1Stance = f1_score(stanceTrue, stancePre, labels=[0,1,2,3], average='macro')
             accuracyRumor = (np.array(rumorTrue) == np.array(rumorPre)).sum() / len(rumorPre)
             accuracyStance = (np.array(stanceTrue) == np.array(stancePre)).sum() / len(stancePre)
             
