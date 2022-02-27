@@ -59,8 +59,8 @@ class MTUS(nn.Module):
         self.load_state_dict(torch.load(path))
     
 class MTES(nn.Module):
-    def __init__(self, inputDim: int, numRumorClass: int, numStanceClass: int,  
-                 numGRULayer=2, embeddingDim=100, hiddenDim=100,
+    def __init__(self, inputDim: int, numRumorClass: int, numStanceClass: int,
+                 numGRULayer=2, embeddingDim=100, hiddenDim=100, typeUS2M='cat',
                  batchSize = 1, bidirectional = False):
         super().__init__() # 调用nn.Moudle父类的初始化方法
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu') # 优先使用cuda
@@ -69,6 +69,7 @@ class MTES(nn.Module):
         self.batchSize = batchSize
         self.bidirectional = bidirectional
         self.D = 2 if self.bidirectional else 1
+        self.typeUS2M = typeUS2M
         
         # embedding使用线性层来把tf-idf向量转换成句嵌入
         self.embeddingRumor = nn.Linear(inputDim, embeddingDim)
@@ -79,10 +80,34 @@ class MTES(nn.Module):
         self.h0Share = nn.Parameter(torch.randn((self.D * numGRULayer, batchSize, hiddenDim)))
 
         # 非共享GRU
-        self.GRURumor = nn.GRU(2 * hiddenDim, hiddenDim, numGRULayer, bidirectional=self.bidirectional)
-        self.GRUStance = nn.GRU(2 * hiddenDim, hiddenDim, numGRULayer, bidirectional=self.bidirectional)
+
+        if self.typeUS2M == 'add':
+        # ======相加======
+            self.GRURumor = nn.GRU(hiddenDim, hiddenDim, numGRULayer, bidirectional=self.bidirectional)
+            self.GRUStance = nn.GRU(hiddenDim, hiddenDim, numGRULayer, bidirectional=self.bidirectional)
+        # ================
+
+        else:
+        # ======拼接======
+            self.GRURumor = nn.GRU(2 * hiddenDim, hiddenDim, numGRULayer, bidirectional=self.bidirectional)
+            self.GRUStance = nn.GRU(2 * hiddenDim, hiddenDim, numGRULayer, bidirectional=self.bidirectional)
+        # ================
+
         self.h0Rumor = nn.Parameter(torch.randn((self.D * numGRULayer, batchSize, hiddenDim)))
         self.h0Stance = nn.Parameter(torch.randn((self.D * numGRULayer, batchSize, hiddenDim)))
+
+        # 共享GRU隐状态接入非共享层的系数
+
+        if self.typeUS2M == 'add':
+        # ======相加======
+            self.US2M = nn.Linear(self.D * hiddenDim, embeddingDim)
+        # ================
+
+        else:
+        # ======拼接======
+            self.US2M = nn.Linear(2 * self.D * hiddenDim, embeddingDim)
+        # ================
+
 
         # 把GRU的隐状态映射成概率
         self.vRumor = nn.Linear(self.D * hiddenDim, numRumorClass)
@@ -93,9 +118,19 @@ class MTES(nn.Module):
         seqLen = sentences.size()[0]
         embeddings = self.embeddingRumor(sentences).view(seqLen, self.batchSize, self.embeddingDim) # embeddings(sepLen, batch, embeddingDim)   
         gruShareOut, _ = self.GRUshare(embeddings, self.h0Share)
-        # gruShareOut(seqLen, batch, numDirection * hiddenDim)\
+        # gruShareOut(seqLen, batch, numDirection * hiddenDim)
 
-        gruRumorIn = torch.cat([embeddings, gruShareOut], dim=2)
+        if self.typeUS2M == 'add':
+        # ======拼接======
+            hS2M = self.US2M(gruShareOut) # hS2M(sepLen, batch, embeddingDim)
+            gruRumorIn = embeddings + hS2M
+        # ================
+
+        else:
+        # ======相加======
+            gruRumorIn = torch.cat([embeddings, gruShareOut], dim=2)
+        # ================
+
         gruRumorOut, _ = self.GRURumor(gruRumorIn, self.h0Rumor)
         # gruRumorOut(seqLen, batch, numDirection * hiddenDim)
 
@@ -109,7 +144,17 @@ class MTES(nn.Module):
         gruShareOut, _ = self.GRUshare(embeddings, self.h0Share)
         # gruShareOut(seqLen, batch, numDirection * hiddenDim)
         
-        gruStanceIn = torch.cat([embeddings, gruShareOut], dim=2)
+        if self.typeUS2M == 'add':
+        # ======相加======
+            hS2M = self.US2M(gruShareOut) # hS2M(sepLen, batch, embeddingDim)
+            gruStanceIn = embeddings + hS2M
+        # ================
+
+        else:
+        # ======拼接======
+            gruStanceIn = torch.cat([embeddings, gruShareOut], dim=2)
+        # ================
+
         gruStanceOut, _ = self.GRUStance(gruStanceIn, self.h0Stance)
         # gruRumorOut(seqLen, batch, numDirection * hiddenDim)
 

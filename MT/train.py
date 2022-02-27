@@ -25,6 +25,8 @@ parser.add_argument('--bidirectional', type=bool, default=False,\
                     help='whether use bi-directional GRU, default: False')
 parser.add_argument('--modelType', type=str, default='mtus',\
                     help='select model type between mtus and mtes, default: mtus')
+parser.add_argument('--s2mType', type=str, default='cat',\
+                    help='select way(add/cat) to get intput for GRU in dfferent mission, only used in mtes, default: cat')
 # dataset parameters
 parser.add_argument('--dataPath', type=str, default='../dataset/semeval2017-task8/',\
                     help='path to semeval2017 task8 dataset, default: ../dataset/semeval2017-task8/')
@@ -54,6 +56,7 @@ def main():
     elif args.modelType == 'mtes':
         model = MTES(embeddingDim=args.embeddingDim, hiddenDim=args.hiddenDim,\
                      inputDim=trainSet[0][0].size()[1], numGRULayer=args.gruLayer,\
+                     typeUS2M=args.s2mType,\
                      numRumorClass=len(label2IndexRumor),\
                      numStanceClass=len(label2IndexStance))
     else:
@@ -164,7 +167,7 @@ def main():
 
 #==============================================
 # 保存rumor detection任务marco F1最大时的模型
-            if(macroF1Rumor > maxMacroF1Rumor):
+            if(macroF1Rumor + macroF1Stance > maxMacroF1Rumor + maxMacroF1Stance):
                 model.save(args.savePath)
 #==============================================
             
