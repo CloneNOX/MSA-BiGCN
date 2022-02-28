@@ -1,41 +1,33 @@
 import torch
-from torch_scatter import scatter_mean
 import torch.nn.functional as F
-from torch_geometric.data import DataLoader
 from torch_geometric.nn import GCNConv
-import copy
 
-class TDrumorGCN(torch.nn.Module):
-    def __init__(self,in_feats,hid_feats,out_feats):
-        super(TDrumorGCN, self).__init__()
-        self.conv1 = GCNConv(in_feats, hid_feats)
-        self.conv2 = GCNConv(hid_feats+in_feats, out_feats)
+class GCN(torch.nn.Module):
+    def __init__(self, inputDim, hiddenDim, outDim):
+        super(GCN, self).__init__()
+        self.conv1 = GCNConv(inputDim, hiddenDim)
+        self.conv2 = GCNConv(hiddenDim + inputDim, outDim)
 
     def forward(self, data):
-        x, edge_index = data.x, data.edge_index
-        x1=copy.copy(x.float())
-        x = self.conv1(x, edge_index)
-        x2=copy.copy(x)
-        rootindex = data.rootindex
-        root_extend = torch.zeros(len(data.batch), x1.size(1))
-        batch_size = max(data.batch) + 1
-        for num_batch in range(batch_size):
-            index = (torch.eq(data.batch, num_batch))
-            root_extend[index] = x1[rootindex[num_batch]]
-        x = torch.cat((x,root_extend), 1)
+        posts, edge_index, rootIndex = data.x, data.edge_index, data.rootIndex # posts(n, inputDim)
+        
+        conv1Out = self.conv1(posts, edge_index)
+        postRoot = torch.copy(posts[rootIndex])
+        postRoot = postRoot.repeat(posts.shape[0])
+        conv1Root = conv1Out[rootIndex]
 
-        x = F.relu(x)
-        x = F.dropout(x, training=self.training)
-        x = self.conv2(x, edge_index)
-        x = F.relu(x)
-        root_extend = torch.zeros(len(data.batch), x2.size(1))
-        for num_batch in range(batch_size):
-            index = (torch.eq(data.batch, num_batch))
-            root_extend[index] = x2[rootindex[num_batch]]
-        x = torch.cat((x,root_extend), 1)
-        x= scatter_mean(x, data.batch, dim=0)
+        conv2In = torch.cat([conv1Out, postRoot], dim=1)
+        conv2In = F.relu(conv2In)
+        conv2In = F.dropout(conv2In, training=self.training)
+        conv2Out = self.conv2(conv2In, edge_index)
+        conv2Out = F.relu(conv2Out)
 
-        return x
+        conv1Root = conv1Root.repeat(posts.shape[0])
+        feature = torch.cat([conv1Root, conv2Out], dim=1)
+        feature = feature.view(1, feature.shape[0], feature.shape[1])
+        # avg_pool1d要求的输入是(batch, in_channels, *)
+        feature = F.avg_pool1d(feature, kernel_size=3, stride=1) # 设置步长为1，使得卷积不会改变特征维度
+        return feature.view(feature.shape[0], feature[1])
     
     # 更换计算设备
     def set_device(self, device: torch.device) -> torch.nn.Module:
@@ -50,66 +42,19 @@ class TDrumorGCN(torch.nn.Module):
     def load(self, path: str):
         self.load_state_dict(torch.load(path))
 
-class BUrumorGCN(torch.nn.Module):
-    def __init__(self,in_feats,hid_feats,out_feats):
-        super(BUrumorGCN, self).__init__()
-        self.conv1 = GCNConv(in_feats, hid_feats)
-        self.conv2 = GCNConv(hid_feats+in_feats, out_feats)
+class BiGCN(torch.nn.Module):
+    def __init__(self, inputDim, hiddenDim, convOutDim, NumRumorTag):
+        super(BiGCN, self).__init__()
+        self.TDGCN = GCN(inputDim, hiddenDim, convOutDim)
+        self.BUGCN = GCN(inputDim, hiddenDim, convOutDim)
+        self.fc=torch.nn.Linear((convOutDim + hiddenDim) * 2, NumRumorTag)
 
-    def forward(self, data):
-        x, edge_index = data.x, data.BU_edge_index
-        x1 = copy.copy(x.float())
-        x = self.conv1(x, edge_index)
-        x2 = copy.copy(x)
-
-        rootindex = data.rootindex
-        root_extend = torch.zeros(len(data.batch), x1.size(1))
-        batch_size = max(data.batch) + 1
-        for num_batch in range(batch_size):
-            index = (torch.eq(data.batch, num_batch))
-            root_extend[index] = x1[rootindex[num_batch]]
-        x = torch.cat((x,root_extend), 1)
-
-        x = F.relu(x)
-        x = F.dropout(x, training=self.training)
-        x = self.conv2(x, edge_index)
-        x = F.relu(x)
-        root_extend = torch.zeros(len(data.batch), x2.size(1))
-        for num_batch in range(batch_size):
-            index = (torch.eq(data.batch, num_batch))
-            root_extend[index] = x2[rootindex[num_batch]]
-        x = torch.cat((x,root_extend), 1)
-
-        x= scatter_mean(x, data.batch, dim=0)
-        return x
-
-    # 更换计算设备
-    def set_device(self, device: torch.device) -> torch.nn.Module:
-        _model = self.to(device)
-        _model.device = device
-        return _model
-
-    # 保存模型
-    def save(self, path: str):
-        torch.save(self.state_dict(), path)
-    # 加载模型
-    def load(self, path: str):
-        self.load_state_dict(torch.load(path))
-
-class Net(torch.nn.Module):
-    def __init__(self,in_feats,hid_feats,out_feats):
-        super(Net, self).__init__()
-        self.TDrumorGCN = TDrumorGCN(in_feats, hid_feats, out_feats)
-        self.BUrumorGCN = BUrumorGCN(in_feats, hid_feats, out_feats)
-        self.fc=torch.nn.Linear((out_feats+hid_feats)*2,4)
-
-    def forward(self, data):
-        TD_x = self.TDrumorGCN(data)
-        BU_x = self.BUrumorGCN(data)
-        x = torch.cat((BU_x,TD_x), 1)
-        x=self.fc(x)
-        x = F.log_softmax(x, dim=1)
-        return x
+    def forward(self, dataTD, dataBU):
+        TDOut = self.TDGCN(dataTD)
+        BUOut = self.BUGCN(dataBU)
+        feature = torch.cat((TDOut, BUOut), dim=1)
+        p = self.fc(feature)
+        return p[dataTD.rootIndex]
 
     # 更换计算设备
     def set_device(self, device: torch.device) -> torch.nn.Module:

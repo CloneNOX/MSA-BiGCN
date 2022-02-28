@@ -7,7 +7,6 @@ from sklearn.metrics import f1_score
 from torch import optim
 from torch.nn.functional import softmax
 from model import *
-from defaultParameter import*
 from utils import *
 from random import randint, shuffle
 from tqdm import tqdm
