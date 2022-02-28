@@ -49,15 +49,19 @@ def main():
     trainSet, label2IndexRumor, label2IndexStance = getTrainSet(args.dataPath)
 
     if args.modelType == 'mtus':
-        model = MTUS(embeddingDim=args.embeddingDim, hiddenDim=args.hiddenDim,\
-                     inputDim=trainSet[0][0].size()[1], numGRULayer=args.gruLayer,\
-                     numRumorClass=len(label2IndexRumor),\
+        model = MTUS(embeddingDim=args.embeddingDim, 
+                     hiddenDim=args.hiddenDim,
+                     inputDim=trainSet[0][0].size()[1], 
+                     numGRULayer=args.gruLayer,
+                     numRumorClass=len(label2IndexRumor),
                      numStanceClass=len(label2IndexStance))
     elif args.modelType == 'mtes':
-        model = MTES(embeddingDim=args.embeddingDim, hiddenDim=args.hiddenDim,\
-                     inputDim=trainSet[0][0].size()[1], numGRULayer=args.gruLayer,\
-                     typeUS2M=args.s2mType,\
-                     numRumorClass=len(label2IndexRumor),\
+        model = MTES(embeddingDim=args.embeddingDim, 
+                     hiddenDim=args.hiddenDim,
+                     inputDim=trainSet[0][0].size()[1], 
+                     numGRULayer=args.gruLayer,
+                     typeUS2M=args.s2mType,
+                     numRumorClass=len(label2IndexRumor),
                      numStanceClass=len(label2IndexStance))
     else:
         return
