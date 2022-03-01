@@ -2,18 +2,21 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch_geometric.nn import GCNConv
+from torch_geometric.data import Data
 from biGCN import *
 
 class ABGCN(nn.Module):
     def __init__(self,
-                 w2vDim: int,
-                 s2vDim: int,
-                 gcnHiddenDim: int,
-                 rumorFeatureDim: int,
-                 numRumorTag: int,
+                 w2vDim: int, # 使用的词嵌入的维度
+                 s2vDim: int, # 使用的句嵌入的维度
+                 gcnHiddenDim: int, # GCN隐藏层的维度（GCNconv1的输出维度）
+                 rumorFeatureDim: int, # GCN输出层的维度
+                 numRumorTag: int, # 谣言标签种类数
+                 numStanceTag: int, # 立场标签种类数
                  batchSize = 1,
-                 s2vMethon = 'a',
-                 numLstmLayer = 2):
+                 s2vMethon = 'a', # 获取据嵌入的方法（l:lstm; a:attention）
+                 numLstmLayer = 2 # lstm层数，仅在s2vMethod == 'l'时有效
+                ):
         super().__init__()
 
         self.w2vDim = w2vDim
@@ -23,6 +26,7 @@ class ABGCN(nn.Module):
         self.s2vMethon = s2vMethon
         self.batchSize = batchSize
         self.numRumorTag = numRumorTag
+        self.numStanceTag = numStanceTag
         self.device = 'cpu'
 
         # ==使用biLSTM获取post的向量表示==
@@ -41,7 +45,7 @@ class ABGCN(nn.Module):
         
         self.biGCN = BiGCN(self.s2vDim, self.gcnHiddenDim, self.rumorFeatureDim, self.numRumorTag)
 
-    def forward(self, data):
+    def forwardRumor(self, data):
         # 各节点的特征表示，此时是word2vec的形式
         nodeFeature = data['nodeFeature']
 
@@ -65,9 +69,9 @@ class ABGCN(nn.Module):
         dataBU = Data(x = s2v.to(self.device), 
                       edgeIndex = data['edgeIndexBU'].to(self.device), 
                       rootIndex = data['threadIndex'])
-        feature = self.biGCN(dataTD, dataBU) # feature.shape = (4,)
+        p = self.biGCN(dataTD, dataBU) # feature.shape = (4,)
         
-        return feature
+        return p
         
 
     # 更换计算设备

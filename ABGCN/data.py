@@ -3,7 +3,6 @@ from torch_geometric.data import Data
 from torch.utils.data import Dataset
 import json
 from gensim.models.keyedvectors import KeyedVectors
-import numpy as np
 from utils import flattenStructure
 
 class semeval2017Dataset(Dataset):
@@ -45,6 +44,8 @@ class semeval2017Dataset(Dataset):
                 'rumorTag': torch.LongTensor(
                     [rawDataset['label2IndexRumor'][rawDataset['rumorTag'][threadId]]]),
                 'stanveTag': torch.LongTensor(stanceTag),
+                'label2IndexRumor': rawDataset['label2IndexRumor'],
+                'label2IndexStance': rawDataset['label2IndexStance']
             })
 
     def __getitem__(self, item):
