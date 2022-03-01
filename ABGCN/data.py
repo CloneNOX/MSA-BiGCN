@@ -29,23 +29,57 @@ class semeval2017Dataset(Dataset):
             for i in range(len(thread)):
                 text = thread[i][1]
                 textW2v = []
-                for word in text:
+                for word in text.split(' '):
                     if word in word2vec:
                         textW2v.append(word2vec[word].tolist())
                     else:
                         textW2v.append([0. for _ in range(w2vDim)])
                 thread[i][1] = torch.Tensor(textW2v)
+            threadIndex, nodeFeature, edgeIndex = self.structure2graph(threadId, thread, structure)
             self.dataset.append({
                 'threadId': id,
-                'threads': thread,
+                'threadIndex': threadIndex,
+                'nodeFeature': nodeFeature,
+                'edgeIndexTD': edgeIndex,
+                'edgeIndexBU': torch.flip(edgeIndex, dims=[0]),
                 'rumorTag': torch.LongTensor(
                     [rawDataset['label2IndexRumor'][rawDataset['rumorTag'][threadId]]]),
                 'stanveTag': torch.LongTensor(stanceTag),
-                'structure': structure
             })
 
     def __getitem__(self, item):
         return self.dataset[item]
 
-    def _len__(self):
+    def __len__(self):
         return len(self.dataset)
+
+    # 根据输入的结构dict生成图，返回：threadIndex：thread在nodeFeature中的下标，nodeFeature，edgeIndex(TD)
+    def structure2graph(self, threadId, thread, structure):
+        threadIndex = 0
+        nodeFeature = []
+        id2Index = {}
+        edgeIndex = [[], []]
+
+        for i in range(len(thread)): # w2v(seqLen, w2vDim)这里的seqLen是不一致的
+            if thread[i][0] == threadId:
+                threadIndex = i
+            nodeFeature.append(thread[i][1])
+            id2Index[thread[i][0]] = i
+
+        # 使用栈模拟递归建立TD树状图
+        stack = [[None, structure]]
+        while stack:
+            parent, childDict = stack[-1]
+            if parent != None:
+                for child in childDict:
+                    if parent in id2Index and child in id2Index:
+                        edgeIndex[0].append(id2Index[parent])
+                        edgeIndex[1].append(id2Index[child])
+            
+            stack.pop()
+            for child in childDict:
+                if childDict[child]:
+                    stack.append([child, childDict[child]])
+        edgeIndex = torch.LongTensor(edgeIndex)
+        
+        return threadIndex, nodeFeature, edgeIndex

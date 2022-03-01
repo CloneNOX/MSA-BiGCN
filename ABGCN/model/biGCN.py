@@ -9,11 +9,11 @@ class GCN(torch.nn.Module):
         self.conv2 = GCNConv(hiddenDim + inputDim, outDim)
 
     def forward(self, data):
-        posts, edge_index, rootIndex = data.x, data.edge_index, data.rootIndex # posts(n, inputDim)
+        posts, edge_index, rootIndex = data.x, data.edgeIndex, data.rootIndex # posts(n, inputDim)
         
         conv1Out = self.conv1(posts, edge_index)
-        postRoot = torch.copy(posts[rootIndex])
-        postRoot = postRoot.repeat(posts.shape[0])
+        postRoot = torch.clone(posts[rootIndex])
+        postRoot = postRoot.repeat(posts.shape[0], 1)
         conv1Root = conv1Out[rootIndex]
 
         conv2In = torch.cat([conv1Out, postRoot], dim=1)
@@ -22,19 +22,18 @@ class GCN(torch.nn.Module):
         conv2Out = self.conv2(conv2In, edge_index)
         conv2Out = F.relu(conv2Out)
 
-        conv1Root = conv1Root.repeat(posts.shape[0])
+        conv1Root = conv1Root.repeat(posts.shape[0], 1)
         feature = torch.cat([conv1Root, conv2Out], dim=1)
         feature = feature.view(1, feature.shape[0], feature.shape[1])
-        # avg_pool1d要求的输入是(batch, in_channels, *)
-        feature = F.avg_pool1d(feature, kernel_size=3, stride=1) # 设置步长为1，使得卷积不会改变特征维度
-        return feature.view(feature.shape[0], feature[1])
+        # avg_pool1d要求的输入是(batch, in_channels, *)，设置stride,padding为1，使得卷积不会改变特征维度
+        feature = F.avg_pool1d(feature, kernel_size=3, stride=1, padding=1)
+        return feature.view(feature.shape[1], feature.shape[2])
     
     # 更换计算设备
     def set_device(self, device: torch.device) -> torch.nn.Module:
         _model = self.to(device)
         _model.device = device
         return _model
-
     # 保存模型
     def save(self, path: str):
         torch.save(self.state_dict(), path)
@@ -61,7 +60,6 @@ class BiGCN(torch.nn.Module):
         _model = self.to(device)
         _model.device = device
         return _model
-
     # 保存模型
     def save(self, path: str):
         torch.save(self.state_dict(), path)
