@@ -7,7 +7,7 @@ from torch.utils.data import DataLoader
 import argparse
 import numpy as np
 from data import *
-from model.ABGCN import *
+from ABGCN import *
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics import f1_score
 from utils import *
