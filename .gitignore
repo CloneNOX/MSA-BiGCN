@@ -286,3 +286,4 @@ semeval2017-task8-test-data/
 *.txt
 *.tar.bz2
 *.doc
+*.md

@@ -13,6 +13,7 @@ from sklearn.metrics import f1_score
 from utils import *
 from random import randint, shuffle
 from tqdm import tqdm
+from copy import copy
 import sys
 
 parser = argparse.ArgumentParser(description="Training script for MTUS/MTES")
@@ -60,6 +61,12 @@ def main():
                                  w2vPath = args.w2vPath,
                                  w2vDim = args.w2vDim)
     loader = DataLoader(dataset, shuffle=True)
+    with open(args.dataPath + 'trainSet.json', 'r') as f:
+            content = f.read()
+    rawDataset = json.loads(content)
+    label2IndexRumor = copy(rawDataset['label2IndexRumor'])
+    label2IndexStance = copy(rawDataset['label2IndexStance'])
+    del rawDataset
     print('done.')
 
     # 选定实验设备
@@ -82,8 +89,8 @@ def main():
                   s2vDim = args.s2vDim,
                   gcnHiddenDim = args.gcnHiddenDim,
                   rumorFeatureDim = args.rumorFeatureDim,
-                  numRumorTag = len(data['lebel2IndexRumor']),
-                  numStanceTag = len(data['label2IndexStance']),
+                  numRumorTag = len(label2IndexRumor),
+                  numStanceTag = len(label2IndexStance),
                   s2vMethon = 'l')
     model = model.set_device(device)
     print(model)
@@ -111,21 +118,25 @@ def main():
         if randint(0, 0) % 2 == 0: # 训练M1
             f.write('working on task 1(rumor detection)\n')
             model.train()
-            curNum = 1
-            for data in tqdm(iter(loader), 
-                             desc="[epoch {:d}, rumor, avg loss: {:f}]".format(epoch, totalLoss / curNum),
-                             leave=False, 
-                             ncols=100):
+            for data in tqdm(iter(loader), desc="[epoch {:d}, rumor]".format(epoch), leave=False, ncols=100):
+                # 抹除dataloader生成batch时对数据的升维
+                data['threadId'] = data['threadId'][0]
+                data['threadIndex'] = data['threadIndex'][0]
+                for i in range(len(data['nodeFeature'])):
+                    data['nodeFeature'][i] = data['nodeFeature'][i].view((data['nodeFeature'][i].shape[1], data['nodeFeature'][i].shape[2]))
+                data['edgeIndexTD'] = data['edgeIndexTD'].view((data['edgeIndexTD'].shape[1], data['edgeIndexTD'].shape[2]))
+                data['edgeIndexBU'] = data['edgeIndexBU'].view((data['edgeIndexBU'].shape[1], data['edgeIndexBU'].shape[2]))
+                data['rumorTag'] = data['rumorTag'].view((data['rumorTag'].shape[1]))
+                data['stanceTag'] = data['stanceTag'].view((data['stanceTag'].shape[1]))
                 rumorTag = data['rumorTag'].to(device)
 
                 optimizer.zero_grad()
-                p = model.forward(data)
+                p = model.forwardRumor(data)
                 loss = loss_func(p, rumorTag)
                 totalLoss += loss
                 loss.backward()
                 optimizer.step()
-                curNum += 1
-            f.write("average loss: {:.4f} \n".format(totalLoss / curNum - 1))
+            f.write("average loss: {:.4f} \n".format(totalLoss / len(loader)))
         else: # 训练M2
             # f.write('working on task 2(stance analyze)\n')
             # model.train()
@@ -148,7 +159,7 @@ def main():
         if epoch % 5 == 0: # 每5个eopch进行一次测试，随机抽取训练集中的数据
             f.write('==========\nmodel testing\n')
             model.eval()
-            testIndex = [randint(0, len(loader) - 1) for _ in range(len(loader) // 5)]
+            testIndex = [randint(0, len(dataset) - 1) for _ in range(len(dataset) // 5)]
             rumorTrue = []
             stanceTrue = []
             rumorPre = []
@@ -157,17 +168,14 @@ def main():
             totalLossStance = 0.
             
             f.write('testing on both task\n')
-            for data in tqdm(iter(loader), 
-                             desc="[epoch {:d}, rumor, avg loss: {:f}]".format(epoch, totalLoss / curNum),
-                             leave=False, 
-                             ncols=100):
-                rumorTag = data['rumorTag'].to(device)
-                stanceTag = data['stanceTag'].to(device)
-                rumorTrue += data['rumorTag'].tolist()
-                stanceTrue += data['stanceTag'].tolist()
+            for i in tqdm(testIndex, desc="[epoch {:d}, test]".format(epoch), leave=False, ncols=100):
+                rumorTag = dataset[i]['rumorTag'].to(device)
+                stanceTag = dataset[i]['stanceTag'].to(device)
+                rumorTrue += dataset[i]['rumorTag'].tolist()
+                stanceTrue += dataset[i]['stanceTag'].tolist()
                 
                 pRumor = model.forwardRumor(data)
-                #stanceFeature = model.forwardStance(x).view(-1, len(label2IndexStance))
+                # stanceFeature = model.forwardStance(x).view(-1, len(label2IndexStance))
                 loss = loss_func(pRumor, rumorTag)
                 totalLossRumor += loss
                 # loss = loss_func(pStance, stanceTag)

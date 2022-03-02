@@ -43,9 +43,7 @@ class semeval2017Dataset(Dataset):
                 'edgeIndexBU': torch.flip(edgeIndex, dims=[0]),
                 'rumorTag': torch.LongTensor(
                     [rawDataset['label2IndexRumor'][rawDataset['rumorTag'][threadId]]]),
-                'stanveTag': torch.LongTensor(stanceTag),
-                'label2IndexRumor': rawDataset['label2IndexRumor'],
-                'label2IndexStance': rawDataset['label2IndexStance']
+                'stanceTag': torch.LongTensor(stanceTag),
             })
 
     def __getitem__(self, item):

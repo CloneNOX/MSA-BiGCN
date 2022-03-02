@@ -13,7 +13,6 @@ class ABGCN(nn.Module):
                  rumorFeatureDim: int, # GCN输出层的维度
                  numRumorTag: int, # 谣言标签种类数
                  numStanceTag: int, # 立场标签种类数
-                 batchSize = 1,
                  s2vMethon = 'a', # 获取据嵌入的方法（l:lstm; a:attention）
                  numLstmLayer = 2 # lstm层数，仅在s2vMethod == 'l'时有效
                 ):
@@ -24,7 +23,7 @@ class ABGCN(nn.Module):
         self.gcnHiddenDim = gcnHiddenDim
         self.rumorFeatureDim = rumorFeatureDim
         self.s2vMethon = s2vMethon
-        self.batchSize = batchSize
+        self.batchSize = 1 # 实际上，由于不会写支持batch化的GCN，模型时不支持batch化训练的
         self.numRumorTag = numRumorTag
         self.numStanceTag = numStanceTag
         self.device = 'cpu'
@@ -69,7 +68,7 @@ class ABGCN(nn.Module):
         dataBU = Data(x = s2v.to(self.device), 
                       edgeIndex = data['edgeIndexBU'].to(self.device), 
                       rootIndex = data['threadIndex'])
-        p = self.biGCN(dataTD, dataBU) # feature.shape = (4,)
+        p = self.biGCN(dataTD, dataBU).view(self.batchSize, -1) # p.shape = (1, *)
         
         return p
         
