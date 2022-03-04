@@ -14,7 +14,7 @@ class ABGCN(nn.Module):
                  numRumorTag: int, # 谣言标签种类数
                  numStanceTag: int, # 立场标签种类数
                  s2vMethon = 'a', # 获取据嵌入的方法（l:lstm; a:attention）
-                 numLstmLayer = 2 # lstm层数，仅在s2vMethod == 'l'时有效
+                 numLstmLayer = 1 # lstm层数，仅在s2vMethod == 'l'时有效
                 ):
         super().__init__()
 
@@ -35,8 +35,8 @@ class ABGCN(nn.Module):
                                 hidden_size = self.s2vDim,
                                 num_layers = self.numLstmLayer,
                                 bidirectional=True)
-            self.h0 = nn.Parameter(torch.randn((2 * 2, self.batchSize, self.s2vDim)))
-            self.c0 = nn.Parameter(torch.randn((2 * 2, self.batchSize, self.s2vDim)))
+            self.h0 = nn.Parameter(torch.randn((self.numLstmLayer * 2, self.batchSize, self.s2vDim)))
+            self.c0 = nn.Parameter(torch.randn((self.numLstmLayer * 2, self.batchSize, self.s2vDim)))
             self.s2vDim *= 2 # 由于使用BiDirect所以s2vDim的维度会扩大1倍
         # ==使用Attention==
         else:
