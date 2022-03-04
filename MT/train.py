@@ -46,7 +46,7 @@ parser.add_argument('--savePath', type=str, default='./model/model.pt',\
 def main():
     args = parser.parse_args()
     trainSet, label2IndexRumor, label2IndexStance, tfidf_vec = getTrainSet(args.dataPath)
-    testSet, _, _ = getTestSet(args.dataPath, tfidf_vec)
+    testSet, _, _ = getDevTestSet(args.dataPath, 'dev', tfidf_vec)
 
     if args.modelType == 'mtus':
         model = MTUS(embeddingDim=args.embeddingDim, 
@@ -80,7 +80,7 @@ def main():
     print(model)
 
     loss_func = torch.nn.CrossEntropyLoss(reduction='mean').to(device)
-    optimizer = optim.SGD(model.parameters(), lr=args.lr, weight_decay=args.weightDecay, momentum=0.9) # 优化器，原文使用AdaGrad
+    optimizer = optim.Adagrad(model.parameters(), lr=args.lr, weight_decay=args.weightDecay) # 优化器，原文使用AdaGrad
     
     start = 1
     minLossRumor = float('inf')
@@ -220,7 +220,7 @@ def main():
             maxAccuracyStance = max(maxAccuracyStance, accuracyStance)
             f.write('==========\n')
         f.close()
-        if earlyStopCounter == 10:
+        if earlyStopCounter == 6:
             print('early stop when loss on both task did not decrease')
             break
 # end main()
@@ -272,8 +272,8 @@ def getTrainSet(dataSetPath:str):
     return trainSet, label2IndexRumor, label2IndexStance, tfidf_vec
 # end getTrainSet()
 
-def getTestSet(dataPath: str, tfidf_vec):
-    with open('../dataset/semeval2017-task8/' + 'testSet.json', 'r') as f:
+def getDevTestSet(dataPath: str, type: str, tfidf_vec):
+    with open('../dataset/semeval2017-task8/' + type + 'Set.json', 'r') as f:
         content = f.read()
     testSet = json.loads(content)
     threads = []

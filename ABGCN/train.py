@@ -61,11 +61,11 @@ def main():
                                  w2vPath = args.w2vPath,
                                  w2vDim = args.w2vDim)
     loader = DataLoader(dataset, shuffle=True)
-    testDataset = semeval2017Dataset(dataPath = args.dataPath, 
-                                     type = 'test',
+    devDataset = semeval2017Dataset(dataPath = args.dataPath, 
+                                     type = 'dev',
                                      w2vPath = args.w2vPath,
                                      w2vDim = args.w2vDim)
-    testLoader = DataLoader(testDataset, shuffle=True)
+    devLoader = DataLoader(devDataset, shuffle=True)
     with open(args.dataPath + 'trainSet.json', 'r') as f:
             content = f.read()
     rawDataset = json.loads(content)
@@ -96,11 +96,12 @@ def main():
                   rumorFeatureDim = args.rumorFeatureDim,
                   numRumorTag = len(label2IndexRumor),
                   numStanceTag = len(label2IndexStance),
-                  s2vMethon = 'l')
+                  s2vMethon = 'l',
+                  numLstmLayer = args.numLstmLayer)
     model = model.set_device(device)
     print(model)
     loss_func = torch.nn.CrossEntropyLoss(reduction='mean').to(device)
-    optimizer = optim.SGD(model.parameters(), lr=args.lr, momentum=0.9)
+    optimizer = optim.SGD(model.parameters(), lr=args.lr, weight_decay=args.weightDecay, momentum=0.9)
     
     start = 1
     minLossRumor = float('inf')
@@ -179,7 +180,7 @@ def main():
             totalLossStance = 0.
             
             f.write('testing on both task\n')
-            for data in tqdm(iter(testLoader), desc="[epoch {:d}, test]".format(epoch), leave=False, ncols=100):
+            for data in tqdm(iter(devLoader), desc="[epoch {:d}, test]".format(epoch), leave=False, ncols=100):
                 # 抹除dataloader生成batch时对数据的升维
                 data['threadId'] = data['threadId'][0]
                 data['threadIndex'] = data['threadIndex'][0]
@@ -217,7 +218,7 @@ def main():
             if(macroF1Rumor > maxMacroF1Rumor):
                 model.save(args.savePath)
 #==============================================
-            if totalLossRumor / len(testLoader) < minLossRumor:
+            if totalLossRumor / len(devLoader) < minLossRumor:
                 earlyStopCounter = 0
             else:
                 earlyStopCounter += 1
@@ -241,7 +242,7 @@ def main():
             # maxAccuracyStance = max(maxAccuracyStance, accuracyStance)
             f.write('==========\n')
         f.close()
-        if earlyStopCounter == 10:
+        if earlyStopCounter == 6:
             print('early stop when loss on both task did not decrease')
             break
 # end main()

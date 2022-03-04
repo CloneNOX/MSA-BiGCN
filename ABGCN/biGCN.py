@@ -3,13 +3,14 @@ import torch.nn.functional as F
 from torch_geometric.nn import GCNConv
 
 class GCN(torch.nn.Module):
-    def __init__(self, inputDim, hiddenDim, outDim):
+    def __init__(self, inputDim, hiddenDim, outDim, dropout=0.5):
         super(GCN, self).__init__()
         self.conv1 = GCNConv(inputDim, hiddenDim)
         self.conv2 = GCNConv(hiddenDim + inputDim, outDim)
+        self.dropout = dropout
 
     def forward(self, data):
-        posts, edge_index, rootIndex = data.x, data.edgeIndex, data.rootIndex # posts(n, inputDim)
+        posts, edge_index, rootIndex = data.x, data.edgeIndex, data.rootIndex # posts(n, inputDim), edgeIndex(2, |E|)
         
         conv1Out = self.conv1(posts, edge_index)
         postRoot = torch.clone(posts[rootIndex])
@@ -18,16 +19,15 @@ class GCN(torch.nn.Module):
 
         conv2In = torch.cat([conv1Out, postRoot], dim=1)
         conv2In = F.relu(conv2In)
-        conv2In = F.dropout(conv2In, training=self.training)
+        conv2In = F.dropout(conv2In, training=self.training, p=self.dropout) # BiGCN对于dropout的实现，一次卷积之后随机舍弃一些点
         conv2Out = self.conv2(conv2In, edge_index)
         conv2Out = F.relu(conv2Out)
 
         conv1Root = conv1Root.repeat(posts.shape[0], 1)
         feature = torch.cat([conv1Root, conv2Out], dim=1)
-        feature = feature.view(1, feature.shape[0], feature.shape[1])
-        # avg_pool1d要求的输入是(batch, in_channels, *)，设置stride,padding为1，使得卷积不会改变特征维度
-        feature = F.avg_pool1d(feature, kernel_size=3, stride=1, padding=1)
-        return feature.view(feature.shape[1], feature.shape[2])
+        # 使用均值计算，把所有节点的特征聚合成为图的特征
+        feature = torch.mean(feature, dim=0).view(1, -1)
+        return feature
     
     # 更换计算设备
     def set_device(self, device: torch.device) -> torch.nn.Module:
@@ -53,7 +53,7 @@ class BiGCN(torch.nn.Module):
         BUOut = self.BUGCN(dataBU)
         feature = torch.cat((TDOut, BUOut), dim=1)
         p = self.fc(feature)
-        return p[dataTD.rootIndex]
+        return p
 
     # 更换计算设备
     def set_device(self, device: torch.device) -> torch.nn.Module:
