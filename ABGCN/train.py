@@ -56,15 +56,19 @@ def main():
     # 获取数据集
     print('preparing data...', end='')
     sys.stdout.flush()
-    dataset = semeval2017Dataset(dataPath = args.dataPath, 
-                                 type = 'train',
-                                 w2vPath = args.w2vPath,
-                                 w2vDim = args.w2vDim)
+    dataset = semeval2017Dataset(
+        dataPath = args.dataPath, 
+        type = 'train',
+        w2vPath = args.w2vPath,
+        w2vDim = args.w2vDim
+    )
     loader = DataLoader(dataset, shuffle=True)
-    devDataset = semeval2017Dataset(dataPath = args.dataPath, 
-                                     type = 'dev',
-                                     w2vPath = args.w2vPath,
-                                     w2vDim = args.w2vDim)
+    devDataset = semeval2017Dataset(
+        dataPath = args.dataPath, 
+        type = 'dev',
+        w2vPath = args.w2vPath,
+        w2vDim = args.w2vDim
+    )
     devLoader = DataLoader(devDataset, shuffle=True)
     with open(args.dataPath + 'trainSet.json', 'r') as f:
             content = f.read()

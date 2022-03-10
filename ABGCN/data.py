@@ -4,15 +4,13 @@ from torch.utils.data import Dataset
 import json
 from gensim.models.keyedvectors import KeyedVectors
 from utils import flattenStructure
+from torch.nn.utils.rnn import pad_sequence
 
 class semeval2017Dataset(Dataset):
-    def __init__(self, dataPath: str, type: str, w2vPath=str, w2vDim=100) -> None:
+    def __init__(self, dataPath: str, type: str) -> None:
         with open(dataPath + type + 'Set.json', 'r') as f:
             content = f.read()
         rawDataset = json.loads(content)
-
-        word2vec = KeyedVectors.load_word2vec_format(
-            w2vPath + 'glove.twitter.27B.' + str(w2vDim) + 'd.gensim.txt', binary=False)
 
         self.dataset = []
 
@@ -22,18 +20,10 @@ class semeval2017Dataset(Dataset):
             structure = rawDataset['structures'][threadId]
             ids = flattenStructure(structure)
             for id in ids:
+                # 需要检查一下数据集中是否有这个id对应的post
                 if id in rawDataset['posts'] and id in rawDataset['stanceTag']:
                     thread.append([id, rawDataset['posts'][id]['text']])
                     stanceTag.append(rawDataset['label2IndexStance'][rawDataset['stanceTag'][id]])
-            for i in range(len(thread)):
-                text = thread[i][1]
-                textW2v = []
-                for word in text.split(' '):
-                    if word in word2vec:
-                        textW2v.append(word2vec[word].tolist())
-                    else:
-                        textW2v.append([0. for _ in range(w2vDim)])
-                thread[i][1] = torch.Tensor(textW2v)
             threadIndex, nodeFeature, edgeIndex = self.structure2graph(threadId, thread, structure)
             self.dataset.append({
                 'threadId': id,
@@ -82,3 +72,16 @@ class semeval2017Dataset(Dataset):
         edgeIndex = torch.LongTensor(edgeIndex)
         
         return threadIndex, nodeFeature, edgeIndex
+
+# 把1个thread作为一个batch，把nodeFeature转化成Tensor
+def batchWord2Vec(batch, word2Vec):
+    batch = batch[0]
+    nodeFeature = []
+    for nf in batch['nodeFeature']:
+        w2v = []
+        for word in nf:
+            w2v.append(word2Vec[word].tolist())
+        nodeFeature.append(torch.Tensor(w2v))
+    nodeFeature = pad_sequence(nodeFeature, batch_first=True)
+    batch['nodeFeature'] = nodeFeature
+    return batch
