@@ -5,8 +5,9 @@ import json
 from gensim.models.keyedvectors import KeyedVectors
 from utils import flattenStructure
 from torch.nn.utils.rnn import pad_sequence
+from copy import copy
 
-class semeval2017Dataset(Dataset):
+class semEval2017Dataset(Dataset):
     def __init__(self, dataPath: str, type: str) -> None:
         with open(dataPath + type + 'Set.json', 'r') as f:
             content = f.read()
@@ -24,11 +25,11 @@ class semeval2017Dataset(Dataset):
                 if id in rawDataset['posts'] and id in rawDataset['stanceTag']:
                     thread.append([id, rawDataset['posts'][id]['text']])
                     stanceTag.append(rawDataset['label2IndexStance'][rawDataset['stanceTag'][id]])
-            threadIndex, nodeFeature, edgeIndex = self.structure2graph(threadId, thread, structure)
+            threadIndex, nodeText, edgeIndex = self.structure2graph(threadId, thread, structure)
             self.dataset.append({
                 'threadId': id,
                 'threadIndex': threadIndex,
-                'nodeFeature': nodeFeature,
+                'nodeText': nodeText,
                 'edgeIndexTD': edgeIndex,
                 'edgeIndexBU': torch.flip(edgeIndex, dims=[0]),
                 'rumorTag': torch.LongTensor(
@@ -45,14 +46,14 @@ class semeval2017Dataset(Dataset):
     # 根据输入的结构dict生成图，返回：threadIndex：thread在nodeFeature中的下标，nodeFeature，edgeIndex(TD)
     def structure2graph(self, threadId, thread, structure):
         threadIndex = 0
-        nodeFeature = []
+        nodeText = []
         id2Index = {}
         edgeIndex = [[], []]
 
         for i in range(len(thread)): # w2v(seqLen, w2vDim)这里的seqLen是不一致的
             if thread[i][0] == threadId:
                 threadIndex = i
-            nodeFeature.append(thread[i][1])
+            nodeText.append(thread[i][1])
             id2Index[thread[i][0]] = i
 
         # 使用栈模拟递归建立TD树状图
@@ -71,17 +72,13 @@ class semeval2017Dataset(Dataset):
                     stack.append([child, childDict[child]])
         edgeIndex = torch.LongTensor(edgeIndex)
         
-        return threadIndex, nodeFeature, edgeIndex
+        return threadIndex, nodeText, edgeIndex
 
-# 把1个thread作为一个batch，把nodeFeature转化成Tensor
-def batchWord2Vec(batch, word2Vec):
-    batch = batch[0]
-    nodeFeature = []
-    for nf in batch['nodeFeature']:
-        w2v = []
-        for word in nf:
-            w2v.append(word2Vec[word].tolist())
-        nodeFeature.append(torch.Tensor(w2v))
-    nodeFeature = pad_sequence(nodeFeature, batch_first=True)
-    batch['nodeFeature'] = nodeFeature
-    return batch
+# 把thread内的nodeFeature转化成Tensor，注意返回的需要是原数据的拷贝，不然会被更改
+def collate(batch, word2Vec, cls: torch.Tensor):
+    thread = batch[0]
+    nodeText = []
+    for text in thread['nodeText']: # nf: list[word, word...]
+        nodeText.append("<start>" + text + "<end>")
+    thread['nodeText'] = nodeText
+    return thread

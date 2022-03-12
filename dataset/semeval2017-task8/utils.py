@@ -11,4 +11,4 @@ def fixText(raw: str):
         if raw[i] not in character:
             raw[i] = ' ' + raw[i] + ' '
     raw = ''.join(raw)
-    return raw.split(' ')
+    return raw

@@ -26,7 +26,7 @@ class MTUS(nn.Module):
         
         # 共享GRU层
         self.shareGRU = nn.GRU(embeddingDim, hiddenDim, numGRULayer, bidirectional=self.bidirectional)
-        self.h0 = nn.Parameter(torch.randn((self.D * numGRULayer, self.batchSize, hiddenDim)))
+        self.h0 = nn.Parameter(torch.randn((self.D * numGRULayer, self.batchSize, hiddenDim)), requires_grad=True)
 
         # 把GRU的隐状态映射成概率
         self.vRumor = nn.Linear(self.D * hiddenDim, numRumorClass)
@@ -90,7 +90,7 @@ class MTES(nn.Module):
 
         # 共享GRU层
         self.GRUshare = nn.GRU(embeddingDim, hiddenDim, numGRULayer, bidirectional=self.bidirectional)
-        self.h0Share = nn.Parameter(torch.randn((self.D * numGRULayer, batchSize, hiddenDim)))
+        self.h0Share = nn.Parameter(torch.randn((self.D * numGRULayer, batchSize, hiddenDim)), requires_grad=True)
 
         # 非共享GRU
 
@@ -106,8 +106,8 @@ class MTES(nn.Module):
             self.GRUStance = nn.GRU(2 * hiddenDim, hiddenDim, numGRULayer, bidirectional=self.bidirectional)
         # ================
 
-        self.h0Rumor = nn.Parameter(torch.randn((self.D * numGRULayer, batchSize, hiddenDim)))
-        self.h0Stance = nn.Parameter(torch.randn((self.D * numGRULayer, batchSize, hiddenDim)))
+        self.h0Rumor = nn.Parameter(torch.randn((self.D * numGRULayer, batchSize, hiddenDim)), requires_grad=True)
+        self.h0Stance = nn.Parameter(torch.randn((self.D * numGRULayer, batchSize, hiddenDim)), requires_grad=True)
 
         # 共享GRU隐状态接入非共享层的系数
 

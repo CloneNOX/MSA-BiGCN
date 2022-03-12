@@ -27,16 +27,18 @@ parser.add_argument('--gcnHiddenDim', type=int, default=128,\
                     help='dimention of GCN hidden layer, default: 128')
 parser.add_argument('--rumorFeatureDim', type=int, default=128,\
                     help='dimention of GCN output, default: 128')
-parser.add_argument('--s2v', type=str, default='a',\
-                    help='select method to get sentence2vec, a: attention, l: lstm, default: a')
-parser.add_argument('--numLstmLayer', type=int, default=1,\
-                    help='number of layers in lstm, only works when set: --s2v l, default: 1')
+parser.add_argument('--numHeads', type=int, default=5,\
+                    help='heads of multi-heads self-attention, default: 5')
+parser.add_argument('--dropout', type=float, default=0.0,\
+                    help='dropout rate for model, default: 0.0')
 # dataset parameters
 parser.add_argument('--dataPath', type=str, default='../dataset/semeval2017-task8/',\
                     help='path to training dataset, default: ../dataset/semeval2017-task8/')
 parser.add_argument('--w2vPath', type=str, default='../dataset/glove/',\
                     help='path to word2vec dataset, default: ../dataset/glove/')
 # train parameters
+parser.add_argument('--optimizer', type=str, default='Adam',\
+                    help='set optimizer type in [SGD/Adam], default: Adam')
 parser.add_argument('--lr', type=float, default=1e-3,\
                     help='set learning rate, default: 0.001')
 parser.add_argument('--weightDecay', type=float, default=1e-2,\
@@ -56,20 +58,20 @@ def main():
     # 获取数据集
     print('preparing data...', end='')
     sys.stdout.flush()
-    dataset = semeval2017Dataset(
+    dataset = semEval2017Dataset(
         dataPath = args.dataPath, 
         type = 'train',
         w2vPath = args.w2vPath,
         w2vDim = args.w2vDim
     )
-    loader = DataLoader(dataset, shuffle=True)
-    devDataset = semeval2017Dataset(
+    loader = DataLoader(dataset, shuffle = True, num_workers = 4)
+    devDataset = semEval2017Dataset(
         dataPath = args.dataPath, 
         type = 'dev',
         w2vPath = args.w2vPath,
         w2vDim = args.w2vDim
     )
-    devLoader = DataLoader(devDataset, shuffle=True)
+    devLoader = DataLoader(devDataset, shuffle = True, num_workers = 4)
     with open(args.dataPath + 'trainSet.json', 'r') as f:
             content = f.read()
     rawDataset = json.loads(content)
@@ -94,18 +96,19 @@ def main():
     f.close()
     
     # 声明模型、损失函数、优化器
-    model = ABGCN(w2vDim = args.w2vDim,
-                  s2vDim = args.s2vDim,
-                  gcnHiddenDim = args.gcnHiddenDim,
-                  rumorFeatureDim = args.rumorFeatureDim,
-                  numRumorTag = len(label2IndexRumor),
-                  numStanceTag = len(label2IndexStance),
-                  s2vMethon = 'l',
-                  numLstmLayer = args.numLstmLayer)
+    model = ABGCN(
+        w2vDim = args.w2vDim,
+        s2vDim = args.s2vDim,
+        gcnHiddenDim = args.gcnHiddenDim,
+        rumorFeatureDim = args.rumorFeatureDim,
+        numRumorTag = len(label2IndexRumor),
+        numStanceTag = len(label2IndexStance),
+        numHeads = args.numHeads
+    )
     model = model.set_device(device)
     print(model)
     loss_func = torch.nn.CrossEntropyLoss(reduction='mean').to(device)
-    optimizer = optim.SGD(model.parameters(), lr=args.lr, weight_decay=args.weightDecay, momentum=0.9)
+    optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weightDecay, momentum=0.9)
     
     start = 1
     minLossRumor = float('inf')
@@ -123,14 +126,19 @@ def main():
         f.write('[epoch {:d}] '.format(epoch))
 
         # 训练模型
-        if randint(0, 0) % 2 == 0: # 训练M1
+        if randint(1, 1) % 2 == 0: # 训练M1
             f.write('working on task 1(rumor detection)\n')
             rumorTrue = []
             rumorPre = []
             totalLoss = 0.
             
             model.train()
-            for data in tqdm(iter(loader), desc="[epoch {:d}, rumor]".format(epoch), leave=False, ncols=100):
+            for data in tqdm(
+                iter(loader), 
+                desc="[epoch {:d}, rumor]".format(epoch), 
+                leave=False, 
+                ncols=100
+            ):
                 # 抹除dataloader生成batch时对数据的升维
                 data['threadId'] = data['threadId'][0]
                 data['threadIndex'] = data['threadIndex'][0]
@@ -155,22 +163,34 @@ def main():
             macroF1Rumor = f1_score(rumorTrue, rumorPre, labels=[0,1,2], average='macro')
             f.write("average loss: {:.4f}, macro-f1: {:.4f}\n".format(totalLoss / len(loader), macroF1Rumor))
         else: # 训练M2
-            # f.write('working on task 2(stance analyze)\n')
-            # model.train()
-            # totalLoss = 0.
+            f.write('working on task 2(stance analyze)\n')
+            stanceTrue = []
+            stancePre = []
+            totalLoss = 0.
 
-            # for i in tqdm(range(len(trainSet)), desc="[epoch {:d}, stance]".format(epoch), leave=False, ncols=80):
-            #     x = trainSet[i][0].to(device)
-            #     stanceTag = trainSet[i][2].to(device)
-            #     optimizer.zero_grad()
+            model.train()
+            for data in tqdm(
+                iter(loader), 
+                desc="[epoch {:d}, stance]".format(epoch), 
+                leave=False, 
+                ncols=100
+            ):
+                stanceTag = data['stanceTag']
+                stanceTrue += data['stanceTag'].tolist()
+
+                optimizer.zero_grad()
+                p = model.forwardStance(data)
+                loss = loss_func(p, stanceTag)
+                totalLoss += loss
+                loss.backward()
+                optimizer.step()
+
+                p = softmax(p, dim=1)
+                stancePre += p.max(dim=1)[1].tolist()
                 
-            #     p = model.forwardStance(x).view(-1, len(label2IndexStance))
-            #     loss = loss_func(p, stanceTag)
-            #     totalLoss += loss
-            #     loss.backward()
-            #     optimizer.step()
-            # f.write("average loss: {:.4f}\n".format(totalLoss / len(trainSet)))
-            pass
+            accuracy = (np.array(stancePre) == np.array(stanceTrue)).sum() / len(stanceTrue)
+            macroF1Stance = f1_score(stanceTrue, stancePre, labels=[0,1,2,3], average='macro')
+            f.write("average loss: {:.4f}, macro-f1: {:.4f}\n".format(totalLoss / len(loader), macroF1Stance))
         
         # 测试并保存模型
         if epoch % 5 == 0: # 每5个eopch进行一次测试，使用测试集数据
@@ -186,14 +206,6 @@ def main():
             f.write('testing on both task\n')
             for data in tqdm(iter(devLoader), desc="[epoch {:d}, test]".format(epoch), leave=False, ncols=100):
                 # 抹除dataloader生成batch时对数据的升维
-                data['threadId'] = data['threadId'][0]
-                data['threadIndex'] = data['threadIndex'][0]
-                for i in range(len(data['nodeFeature'])):
-                    data['nodeFeature'][i] = data['nodeFeature'][i].view((data['nodeFeature'][i].shape[1], data['nodeFeature'][i].shape[2]))
-                data['edgeIndexTD'] = data['edgeIndexTD'].view((data['edgeIndexTD'].shape[1], data['edgeIndexTD'].shape[2]))
-                data['edgeIndexBU'] = data['edgeIndexBU'].view((data['edgeIndexBU'].shape[1], data['edgeIndexBU'].shape[2]))
-                data['rumorTag'] = data['rumorTag'].view((data['rumorTag'].shape[1]))
-                data['stanceTag'] = data['stanceTag'].view((data['stanceTag'].shape[1]))
                 rumorTag = data['rumorTag'].to(device)
                 stanceTag = data['stanceTag'].to(device)
                 rumorTrue += data['rumorTag'].tolist()
