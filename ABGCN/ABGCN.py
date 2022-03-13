@@ -15,8 +15,9 @@ class ABGCN(nn.Module):
         rumorFeatureDim: int, # GCN输出层的维度
         numRumorTag: int, # 谣言标签种类数
         numStanceTag: int, # 立场标签种类数
+        w2vAttentionHeads = 5, # multi-head attention中使用的头数
+        s2vAttentionHeads = 8,
         batchFirst = True,
-        numHeads = 5, # multi-head attention中使用的头数
         dropout = 0.0 # 模型默认使用的drop out概率
     ):
         super().__init__()
@@ -29,7 +30,8 @@ class ABGCN(nn.Module):
         self.dropout = dropout
         self.batchFirst = batchFirst
         self.batchSize = 1 # 实际上，由于不会写支持batch化的GCN，我们把1个thread视作1个batch
-        self.numHeads = numHeads
+        self.w2vAttentionHeads = w2vAttentionHeads
+        self.s2vAttentionHeads = s2vAttentionHeads
 
         # 使用预训练word2vec初始化embed层的参数
         self.w2vDim = word2vec.vector_size
@@ -45,23 +47,24 @@ class ABGCN(nn.Module):
         # sentence embed模块
         self.wordAttention = nn.MultiheadAttention(
             embed_dim = self.w2vDim,
-            num_heads = numHeads,
+            num_heads = w2vAttentionHeads,
             dropout = dropout,
             batch_first = True
         )
+        self.s2vFc = nn.Linear(self.w2vDim, self.s2vDim)
         
         # GCN 谣言检测模块
         self.biGCN = BiGCN(self.s2vDim, self.gcnHiddenDim, self.rumorFeatureDim, self.numRumorTag)
-        self.RumorFc = nn.Linear(self.rumorFeatureDim, numRumorTag)
+        self.RumorFc = nn.Linear((rumorFeatureDim + gcnHiddenDim) * 2, numRumorTag)
 
         # Attention立场分析模块
         self.stanceAttention = nn.MultiheadAttention(
-            embed_dim = self.w2vDim,
-            num_heads = numHeads,
+            embed_dim = self.s2vDim,
+            num_heads = s2vAttentionHeads,
             dropout = dropout,
             batch_first = True
         )
-        self.stanceFc = nn.Linear(self.w2vDim, numStanceTag)
+        self.stanceFc = nn.Linear(self.s2vDim, numStanceTag)
 
     # 根据输入的任务标识进行前向迭代，
     def forward(self, thread, mission: int):
@@ -70,9 +73,26 @@ class ABGCN(nn.Module):
         nodeText = thread['nodeText'].view(-1).to(self.device)
         nodeFeature = self.embed(nodeText).view(tuple(shape))
         nodeFeature, _ = self.wordAttention(nodeFeature, nodeFeature, nodeFeature)
+        nodeFeature = torch.tanh(self.s2vFc(nodeFeature))
         
         if(mission == 1):
-            pass
+            # 取出<start> token对应的Attention得分作为节点的sentence Embedding
+            s2v = []
+            for post in nodeFeature:
+                s2v.append(post[0])
+            s2v = torch.stack(s2v, dim = 0)
+            dataTD = Data(
+                x = torch.clone(s2v).to(self.device), 
+                edgeIndex = thread['edgeIndexTD'].to(self.device), 
+                rootIndex = thread['threadIndex']
+            )
+            dataBU = Data(
+                x = torch.clone(s2v).to(self.device), 
+                edgeIndex = thread['edgeIndexBU'].to(self.device), 
+                rootIndex = thread['threadIndex']
+            )
+            nodeFeature = self.biGCN(dataTD, dataBU)
+            return self.RumorFc(nodeFeature)
         else:
             nodeFeature, _ = self.stanceAttention(nodeFeature, nodeFeature, nodeFeature)
             # 取出<start> token对应的Attention得分作为节点的stance特征
@@ -81,25 +101,6 @@ class ABGCN(nn.Module):
                 stanceFeature.append(post[0])
             stanceFeature = torch.stack(stanceFeature, dim = 0)
             return self.stanceFc(stanceFeature)
-        
-
-    def forwardRumor(self, data):
-        nodeFeature = data['nodeFeature'].to(self.device) # 拷贝构造
-        self.forwardS2V(nodeFeature)
-        # 把所有词的Attention表示平均作为句子的向量表示(待定，需要比较采取开头/结尾的表示的方法)
-        nodeFeature = torch.mean(nodeFeature, dim = 1)
-
-        # GCN处理
-        s2v = s2v.view(s2v.shape[0], -1)
-        dataTD = Data(x = s2v.to(self.device), 
-                      edgeIndex = data['edgeIndexTD'].to(self.device), 
-                      rootIndex = data['threadIndex'])
-        dataBU = Data(x = s2v.to(self.device), 
-                      edgeIndex = data['edgeIndexBU'].to(self.device), 
-                      rootIndex = data['threadIndex'])
-        p = self.biGCN(dataTD, dataBU).view(self.batchSize, -1) # p.shape = (1, *)
-        
-        return p
 
     # 更换计算设备
     def set_device(self, device: torch.device) -> torch.nn.Module:

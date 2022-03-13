@@ -22,12 +22,14 @@ parser.add_argument('--w2vDim', type=int, default=100,\
                     help='dimention of word2vec, default: 100')
 parser.add_argument('--s2vDim' ,type=int, default=128,\
                     help='dimention of sentence2vec(get from lstm/attention)')
+parser.add_argument('--w2vAttentionHeads', type=int, default=5,\
+                    help='heads of multi-heads self-attention in word2vec layer, default: 5')
+parser.add_argument('--s2vAttentionHeads', type=int, default=8,\
+                    help='heads of multi-heads self-attention in sentence2vec layer, default: 8')
 parser.add_argument('--gcnHiddenDim', type=int, default=128,\
                     help='dimention of GCN hidden layer, default: 128')
 parser.add_argument('--rumorFeatureDim', type=int, default=128,\
                     help='dimention of GCN output, default: 128')
-parser.add_argument('--numHeads', type=int, default=5,\
-                    help='heads of multi-heads self-attention, default: 5')
 parser.add_argument('--dropout', type=float, default=0.0,\
                     help='dropout rate for model, default: 0.0')
 # dataset parameters
@@ -118,7 +120,8 @@ def main():
         rumorFeatureDim = args.rumorFeatureDim,
         numRumorTag = len(label2IndexRumor),
         numStanceTag = len(label2IndexStance),
-        numHeads = args.numHeads,
+        w2vAttentionHeads = args.w2vAttentionHeads,
+        s2vAttentionHeads = args.s2vAttentionHeads,
         dropout = args.dropout
     )
     model = model.set_device(device)
@@ -200,7 +203,10 @@ def main():
             
             predict = softmax(predict, dim=1)
             pre += predict.max(dim=1)[1].tolist()
-        macroF1 = f1_score(true, pre, labels=[0,1,2,3], average='macro')
+        if task == 1:
+            macroF1 = f1_score(true, pre, labels=[0,1,2], average='macro')
+        else:
+            macroF1 = f1_score(true, pre, labels=[0,1,2,3], average='macro')
         acc = (np.array(true) == np.array(pre)).sum() / len(true)
         f.write("average loss: {:.4f}, accuracy: {:.4f}, macro-f1: {:.4f}\n".format(
             totalLoss / len(loader), 
@@ -211,9 +217,9 @@ def main():
         # 测试并保存模型
         if epoch % 5 == 0: # 每5个eopch进行一次测试，使用测试集数据
             f.write('==================================================\ntest model on dev set\n')
-            # rumorTrue = []
-            # rumorPre = []
-            # totalLossRumor = 0.
+            rumorTrue = []
+            rumorPre = []
+            totalLossRumor = 0.
             stanceTrue = []
             stancePre = []
             totalLossStance = 0.
@@ -226,8 +232,8 @@ def main():
                 leave=False, 
                 ncols=80
             ):
-                # rumorTag = data['rumorTag'].to(device)
-                # rumorTrue += data['rumorTag'].tolist()
+                rumorTag = thread['rumorTag'].to(device)
+                rumorTrue += thread['rumorTag'].tolist()
                 stanceTag = thread['stanceTag'].to(device)
                 stanceTrue += thread['stanceTag'].tolist()
 
@@ -243,22 +249,21 @@ def main():
                 nodeText = pad_sequence(nodeText, padding_value=0, batch_first=True)
                 thread['nodeText'] = nodeText
                 
-                # pRumor = model.forwardRumor(data)
-                # loss = loss_func(pRumor, rumorTag)
-                # totalLossRumor += loss
-                # pRumor = softmax(pRumor, 1)
-                # rumorPre += pRumor.max(dim=1)[1].tolist()
+                predict = model.forward(thread, 1)
+                loss = loss_func(predict, rumorTag)
+                totalLossRumor += loss
+                predict = softmax(predict, 1)
+                rumorPre += predict.max(dim=1)[1].tolist()
 
-                optimizer.zero_grad()
                 predict = model.forward(thread, 2)
                 loss = loss_func(predict, stanceTag)
                 totalLossStance += loss
                 predict = softmax(predict, dim=1)
                 stancePre += predict.max(dim=1)[1].tolist()
             
-            # microF1Rumor = f1_score(rumorTrue, rumorPre, labels=[0,1,2], average='micro')
-            # macroF1Rumor = f1_score(rumorTrue, rumorPre, labels=[0,1,2], average='macro')
-            # accuracyRumor = (np.array(rumorTrue) == np.array(rumorPre)).sum() / len(rumorPre)
+            microF1Rumor = f1_score(rumorTrue, rumorPre, labels=[0,1,2], average='micro')
+            macroF1Rumor = f1_score(rumorTrue, rumorPre, labels=[0,1,2], average='macro')
+            accuracyRumor = (np.array(rumorTrue) == np.array(rumorPre)).sum() / len(rumorPre)
             microF1Stance = f1_score(stanceTrue, stancePre, labels=[0,1,2,3], average='micro')
             macroF1Stance = f1_score(stanceTrue, stancePre, labels=[0,1,2,3], average='macro')
             accuracyStance = (np.array(stanceTrue) == np.array(stancePre)).sum() / len(stancePre)
@@ -273,10 +278,13 @@ def main():
             # else:
             #     earlyStopCounter += 1
 
-            # f.write('rumor detection:\n')
-            # f.write('average loss: {:f}, accuracy: {:f}, micro-f1: {:f}, macro-f1: {:f}\n'.format(
-            #     totalLossRumor / len(loader), accuracyRumor, microF1Rumor, macroF1Rumor
-            # ))
+            f.write('rumor detection:\n')
+            f.write('average loss: {:f}, accuracy: {:f}, micro-f1: {:f}, macro-f1: {:f}\n'.format(
+                totalLossRumor / len(devLoader), 
+                accuracyRumor, 
+                microF1Rumor, 
+                macroF1Rumor
+            ))
             f.write('stance analyze:\n')
             f.write('average loss: {:f}, accuracy: {:f}, micro-f1: {:f}, macro-f1: {:f}\n'.format(
                 totalLossStance / len(devLoader), 
@@ -295,7 +303,7 @@ def main():
             # maxAccuracyStance = max(maxAccuracyStance, accuracyStance)
             f.write('========================================\n')
         f.close()
-        # if earlyStopCounter == 6:
+        # if earlyStopCounter == 10:
         #     print('early stop when loss on both task did not decrease')
         #     break
 # end main()
