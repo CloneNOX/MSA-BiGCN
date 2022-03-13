@@ -15,8 +15,9 @@ class ABGCN(nn.Module):
         rumorFeatureDim: int, # GCN输出层的维度
         numRumorTag: int, # 谣言标签种类数
         numStanceTag: int, # 立场标签种类数
-        w2vAttentionHeads = 5, # multi-head attention中使用的头数
-        s2vAttentionHeads = 8,
+        w2vAttentionHeads = 5, # word2vec multi-head attention中使用的头数
+        s2vAttentionHeads = 8, # sentence2vec multi-head attention中使用的头数
+        needStance = True, # 是否结合stance的特征进GCN里
         batchFirst = True,
         dropout = 0.0 # 模型默认使用的drop out概率
     ):
@@ -27,11 +28,12 @@ class ABGCN(nn.Module):
         self.rumorFeatureDim = rumorFeatureDim
         self.numRumorTag = numRumorTag
         self.numStanceTag = numStanceTag
-        self.dropout = dropout
         self.batchFirst = batchFirst
         self.batchSize = 1 # 实际上，由于不会写支持batch化的GCN，我们把1个thread视作1个batch
         self.w2vAttentionHeads = w2vAttentionHeads
         self.s2vAttentionHeads = s2vAttentionHeads
+        self.needStance = needStance
+        self.dropout = dropout
 
         # 使用预训练word2vec初始化embed层的参数
         self.w2vDim = word2vec.vector_size
@@ -54,7 +56,10 @@ class ABGCN(nn.Module):
         self.s2vFc = nn.Linear(self.w2vDim, self.s2vDim)
         
         # GCN 谣言检测模块
-        self.biGCN = BiGCN(self.s2vDim, self.gcnHiddenDim, self.rumorFeatureDim, self.numRumorTag)
+        if needStance:
+            self.biGCN = BiGCN(2 * self.s2vDim, self.gcnHiddenDim, self.rumorFeatureDim, self.numRumorTag)
+        else:
+            self.biGCN = BiGCN(self.s2vDim, self.gcnHiddenDim, self.rumorFeatureDim, self.numRumorTag)
         self.RumorFc = nn.Linear((rumorFeatureDim + gcnHiddenDim) * 2, numRumorTag)
 
         # Attention立场分析模块
@@ -67,40 +72,44 @@ class ABGCN(nn.Module):
         self.stanceFc = nn.Linear(self.s2vDim, numStanceTag)
 
     # 根据输入的任务标识进行前向迭代，
-    def forward(self, thread, mission: int):
+    def forward(self, thread):
         shape = list(thread['nodeText'].shape)
         shape.append(-1)
         nodeText = thread['nodeText'].view(-1).to(self.device)
         nodeFeature = self.embed(nodeText).view(tuple(shape))
         nodeFeature, _ = self.wordAttention(nodeFeature, nodeFeature, nodeFeature)
         nodeFeature = torch.tanh(self.s2vFc(nodeFeature))
+
+        # stance classification:
+        nodeFeature, _ = self.stanceAttention(nodeFeature, nodeFeature, nodeFeature)
+        # 取出<start> token对应的Attention得分作为节点的stance特征
+        stanceFeature = []
+        for post in nodeFeature:
+            stanceFeature.append(post[0])
+        stanceFeature = torch.stack(stanceFeature, dim = 0)
         
-        if(mission == 1):
-            # 取出<start> token对应的Attention得分作为节点的sentence Embedding
-            s2v = []
-            for post in nodeFeature:
-                s2v.append(post[0])
-            s2v = torch.stack(s2v, dim = 0)
-            dataTD = Data(
-                x = torch.clone(s2v).to(self.device), 
-                edgeIndex = thread['edgeIndexTD'].to(self.device), 
-                rootIndex = thread['threadIndex']
-            )
-            dataBU = Data(
-                x = torch.clone(s2v).to(self.device), 
-                edgeIndex = thread['edgeIndexBU'].to(self.device), 
-                rootIndex = thread['threadIndex']
-            )
-            nodeFeature = self.biGCN(dataTD, dataBU)
-            return self.RumorFc(nodeFeature)
-        else:
-            nodeFeature, _ = self.stanceAttention(nodeFeature, nodeFeature, nodeFeature)
-            # 取出<start> token对应的Attention得分作为节点的stance特征
-            stanceFeature = []
-            for post in nodeFeature:
-                stanceFeature.append(post[0])
-            stanceFeature = torch.stack(stanceFeature, dim = 0)
-            return self.stanceFc(stanceFeature)
+        # rumor detection:
+        # 取出<start> token对应的Attention得分作为节点的sentence Embedding
+        s2v = []
+        for post in nodeFeature:
+            s2v.append(post[0])
+        s2v = torch.stack(s2v, dim = 0)
+        # rumor detection的预测需要结合stance feature
+        if self.needStance: 
+            s2v = torch.cat([s2v, stanceFeature], dim = 1) 
+        dataTD = Data(
+            x = torch.clone(s2v).to(self.device), 
+            edgeIndex = thread['edgeIndexTD'].to(self.device), 
+            rootIndex = thread['threadIndex']
+        )
+        dataBU = Data(
+            x = torch.clone(s2v).to(self.device), 
+            edgeIndex = thread['edgeIndexBU'].to(self.device), 
+            rootIndex = thread['threadIndex']
+        )
+        rumorFeature = self.biGCN(dataTD, dataBU)
+
+        return self.RumorFc(rumorFeature), self.stanceFc(stanceFeature)
 
     # 更换计算设备
     def set_device(self, device: torch.device) -> torch.nn.Module:
