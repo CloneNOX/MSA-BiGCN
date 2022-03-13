@@ -8,7 +8,6 @@ import argparse
 import numpy as np
 from data import *
 from ABGCN import *
-from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics import f1_score
 from utils import *
 from random import randint, shuffle
@@ -41,43 +40,58 @@ parser.add_argument('--optimizer', type=str, default='Adam',\
                     help='set optimizer type in [SGD/Adam], default: Adam')
 parser.add_argument('--lr', type=float, default=1e-3,\
                     help='set learning rate, default: 0.001')
-parser.add_argument('--weightDecay', type=float, default=1e-2,\
-                    help='set weight decay for L2 Regularization, default: 0.01')
+parser.add_argument('--weightDecay', type=float, default=1e-3,\
+                    help='set weight decay for L2 Regularization, default: 0.001')
 parser.add_argument('--epoch', type=int, default=100,\
                     help='epoch to train, default: 100')
-parser.add_argument('--device', type=str, default='cpu',\
-                    help='select device(cuda/cpu), default: cpu')
+parser.add_argument('--device', type=str, default='cuda',\
+                    help='select device(cuda/cpu), default: cuda')
 parser.add_argument('--logName', type=str, default='./log/log.txt',\
                     help='log file name, default: log.txt')
 parser.add_argument('--savePath', type=str, default='./model/model.pt',\
                     help='path to save model')
+parser.add_argument('--task', type=int, default=0,\
+                    help='select task to train, 0: both, 1: rumor, 2: stance, default: 0')
 
 def main():
     args = parser.parse_args()
     
-    # 获取数据集
+    # 获取数据集及词嵌入
     print('preparing data...', end='')
     sys.stdout.flush()
     dataset = semEval2017Dataset(
         dataPath = args.dataPath, 
-        type = 'train',
-        w2vPath = args.w2vPath,
-        w2vDim = args.w2vDim
+        type = 'train'
     )
-    loader = DataLoader(dataset, shuffle = True, num_workers = 4)
+    loader = DataLoader(dataset, shuffle = True, num_workers = 4, collate_fn=collate)
     devDataset = semEval2017Dataset(
         dataPath = args.dataPath, 
-        type = 'dev',
-        w2vPath = args.w2vPath,
-        w2vDim = args.w2vDim
+        type = 'dev'
     )
-    devLoader = DataLoader(devDataset, shuffle = True, num_workers = 4)
+    devLoader = DataLoader(devDataset, shuffle = True, num_workers = 4, collate_fn=collate)
     with open(args.dataPath + 'trainSet.json', 'r') as f:
             content = f.read()
     rawDataset = json.loads(content)
     label2IndexRumor = copy(rawDataset['label2IndexRumor'])
     label2IndexStance = copy(rawDataset['label2IndexStance'])
     del rawDataset
+
+    word2vec = KeyedVectors.load_word2vec_format(
+        '../dataset/glove/glove.twitter.27B.' + str(args.w2vDim) + 'd.gensim.txt',
+        binary=False
+    )
+    vectorSize = word2vec.vector_size
+    word2vec.add_vectors(["<start>", "<end>", "<unk>"] ,np.random.randn(3, vectorSize))
+    with open('../dataset/semeval2017-task8/wordList.json', 'r') as f:
+        content = f.read()
+    wordList = ["<unk>", "<start>", "<end>"]
+    wordList += (json.loads(content)).keys()
+    word2index = {}
+    index = 1
+    for word in wordList:
+        if word in word2vec:
+            word2index[word] = index
+            index += 1
     print('done.')
 
     # 选定实验设备
@@ -97,18 +111,32 @@ def main():
     
     # 声明模型、损失函数、优化器
     model = ABGCN(
-        w2vDim = args.w2vDim,
+        word2vec = word2vec,
+        word2index = word2index,
         s2vDim = args.s2vDim,
         gcnHiddenDim = args.gcnHiddenDim,
         rumorFeatureDim = args.rumorFeatureDim,
         numRumorTag = len(label2IndexRumor),
         numStanceTag = len(label2IndexStance),
-        numHeads = args.numHeads
+        numHeads = args.numHeads,
+        dropout = args.dropout
     )
     model = model.set_device(device)
     print(model)
     loss_func = torch.nn.CrossEntropyLoss(reduction='mean').to(device)
-    optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weightDecay, momentum=0.9)
+    if args.optimizer == 'Adam':
+        optimizer = optim.AdamW(
+            model.parameters(), 
+            lr = args.lr, 
+            weight_decay = args.weightDecay
+        )
+    else:
+        optimizer = optim.SGD(
+            model.parameters(), 
+            lr = args.lr, 
+            momentum = 0.9,
+            weight_decay = args.weightDecay
+        )
     
     start = 1
     minLossRumor = float('inf')
@@ -126,141 +154,150 @@ def main():
         f.write('[epoch {:d}] '.format(epoch))
 
         # 训练模型
-        if randint(1, 1) % 2 == 0: # 训练M1
-            f.write('working on task 1(rumor detection)\n')
-            rumorTrue = []
-            rumorPre = []
-            totalLoss = 0.
-            
-            model.train()
-            for data in tqdm(
-                iter(loader), 
-                desc="[epoch {:d}, rumor]".format(epoch), 
-                leave=False, 
-                ncols=100
-            ):
-                # 抹除dataloader生成batch时对数据的升维
-                data['threadId'] = data['threadId'][0]
-                data['threadIndex'] = data['threadIndex'][0]
-                for i in range(len(data['nodeFeature'])):
-                    data['nodeFeature'][i] = data['nodeFeature'][i].view((data['nodeFeature'][i].shape[1], data['nodeFeature'][i].shape[2]))
-                data['edgeIndexTD'] = data['edgeIndexTD'].view((data['edgeIndexTD'].shape[1], data['edgeIndexTD'].shape[2]))
-                data['edgeIndexBU'] = data['edgeIndexBU'].view((data['edgeIndexBU'].shape[1], data['edgeIndexBU'].shape[2]))
-                data['rumorTag'] = data['rumorTag'].view((data['rumorTag'].shape[1]))
-                data['stanceTag'] = data['stanceTag'].view((data['stanceTag'].shape[1]))
-                rumorTag = data['rumorTag'].to(device)
-                rumorTrue += data['rumorTag'].tolist()
-
-                optimizer.zero_grad()
-                p = model.forwardRumor(data)
-                loss = loss_func(p, rumorTag)
-                totalLoss += loss
-                loss.backward()
-                optimizer.step()
-                
-                p = softmax(p, dim=1)
-                rumorPre += p.max(dim=1)[1].tolist()
-            macroF1Rumor = f1_score(rumorTrue, rumorPre, labels=[0,1,2], average='macro')
-            f.write("average loss: {:.4f}, macro-f1: {:.4f}\n".format(totalLoss / len(loader), macroF1Rumor))
-        else: # 训练M2
-            f.write('working on task 2(stance analyze)\n')
-            stanceTrue = []
-            stancePre = []
-            totalLoss = 0.
-
-            model.train()
-            for data in tqdm(
-                iter(loader), 
-                desc="[epoch {:d}, stance]".format(epoch), 
-                leave=False, 
-                ncols=100
-            ):
-                stanceTag = data['stanceTag']
-                stanceTrue += data['stanceTag'].tolist()
-
-                optimizer.zero_grad()
-                p = model.forwardStance(data)
-                loss = loss_func(p, stanceTag)
-                totalLoss += loss
-                loss.backward()
-                optimizer.step()
-
-                p = softmax(p, dim=1)
-                stancePre += p.max(dim=1)[1].tolist()
-                
-            accuracy = (np.array(stancePre) == np.array(stanceTrue)).sum() / len(stanceTrue)
-            macroF1Stance = f1_score(stanceTrue, stancePre, labels=[0,1,2,3], average='macro')
-            f.write("average loss: {:.4f}, macro-f1: {:.4f}\n".format(totalLoss / len(loader), macroF1Stance))
+        if args.task == 1:
+            task = 1
+        elif args.task == 2: 
+            task = 2
+        else:
+            task = randint(1, 2)
+        f.write('working on task {:d}({:s})\n'.format(task, 'rumor detection' if task == 1 else 'stance classification'))
+        true = []
+        pre = []
+        totalLoss = 0.
         
+        model.train()
+        for thread in tqdm(
+            iter(loader), 
+            desc="[epoch {:d}, {:s}]".format(epoch, 'rumor' if task == 1 else 'stance'), 
+            leave=False, 
+            ncols=100
+        ):
+            if task == 1:
+                tag = thread['rumorTag'].to(device)
+                true += thread['rumorTag'].tolist()
+            else:
+                tag = thread['stanceTag'].to(device)
+                true += thread['stanceTag'].tolist()
+            
+            nodeText = thread['nodeText']
+            for i in range(len(nodeText)):
+                indexList = []
+                for word in nodeText[i]:
+                    if word in word2index:
+                        indexList.append(word2index[word])
+                    elif word != '':
+                        indexList.append(word2index['<unk>'])
+                nodeText[i] = torch.IntTensor(indexList).to(device)
+            nodeText = pad_sequence(nodeText, padding_value=0, batch_first=True)
+            thread['nodeText'] = nodeText
+
+            optimizer.zero_grad()
+            predict = model.forward(thread, task)
+            loss = loss_func(predict, tag)
+            totalLoss += loss
+            loss.backward()
+            optimizer.step()
+            
+            predict = softmax(predict, dim=1)
+            pre += predict.max(dim=1)[1].tolist()
+        macroF1 = f1_score(true, pre, labels=[0,1,2,3], average='macro')
+        acc = (np.array(true) == np.array(pre)).sum() / len(true)
+        f.write("average loss: {:.4f}, accuracy: {:.4f}, macro-f1: {:.4f}\n".format(
+            totalLoss / len(loader), 
+            acc,
+            macroF1
+        ))
+
         # 测试并保存模型
         if epoch % 5 == 0: # 每5个eopch进行一次测试，使用测试集数据
-            f.write('==========\nsaved model testing\n')
-            model.eval()
-            rumorTrue = []
-            rumorPre = []
-            totalLossRumor = 0.
+            f.write('==================================================\ntest model on dev set\n')
+            # rumorTrue = []
+            # rumorPre = []
+            # totalLossRumor = 0.
             stanceTrue = []
             stancePre = []
             totalLossStance = 0.
             
             f.write('testing on both task\n')
-            for data in tqdm(iter(devLoader), desc="[epoch {:d}, test]".format(epoch), leave=False, ncols=100):
-                # 抹除dataloader生成batch时对数据的升维
-                rumorTag = data['rumorTag'].to(device)
-                stanceTag = data['stanceTag'].to(device)
-                rumorTrue += data['rumorTag'].tolist()
-                stanceTrue += data['stanceTag'].tolist()
+            model.eval()
+            for thread in tqdm(
+                iter(devLoader), 
+                desc="[epoch {:d}, test]".format(epoch), 
+                leave=False, 
+                ncols=80
+            ):
+                # rumorTag = data['rumorTag'].to(device)
+                # rumorTrue += data['rumorTag'].tolist()
+                stanceTag = thread['stanceTag'].to(device)
+                stanceTrue += thread['stanceTag'].tolist()
+
+                nodeText = thread['nodeText']
+                for i in range(len(nodeText)):
+                    indexList = []
+                    for word in nodeText[i]:
+                        if word in word2index:
+                            indexList.append(word2index[word])
+                        elif word != '':
+                            indexList.append(word2index['<unk>'])
+                    nodeText[i] = torch.IntTensor(indexList).to(device)
+                nodeText = pad_sequence(nodeText, padding_value=0, batch_first=True)
+                thread['nodeText'] = nodeText
                 
-                pRumor = model.forwardRumor(data)
-                # stanceFeature = model.forwardStance(x).view(-1, len(label2IndexStance))
-                loss = loss_func(pRumor, rumorTag)
-                totalLossRumor += loss
-                # loss = loss_func(pStance, stanceTag)
-                # totalLossStance += loss
-                pRumor = softmax(pRumor, 1)
-                rumorPre += pRumor.max(dim=1)[1].tolist()
-                # pStance = softmax(pStance, 1)
-                # stancePre += pStance.max(dim=1)[1].tolist()
+                # pRumor = model.forwardRumor(data)
+                # loss = loss_func(pRumor, rumorTag)
+                # totalLossRumor += loss
+                # pRumor = softmax(pRumor, 1)
+                # rumorPre += pRumor.max(dim=1)[1].tolist()
+
+                optimizer.zero_grad()
+                predict = model.forward(thread, 2)
+                loss = loss_func(predict, stanceTag)
+                totalLossStance += loss
+                predict = softmax(predict, dim=1)
+                stancePre += predict.max(dim=1)[1].tolist()
             
-            microF1Rumor = f1_score(rumorTrue, rumorPre, labels=[0,1,2], average='micro')
-            macroF1Rumor = f1_score(rumorTrue, rumorPre, labels=[0,1,2], average='macro')
-            # microF1Stance = f1_score(stanceTrue, stancePre, labels=[0,1,2,3], average='micro')
-            # macroF1Stance = f1_score(stanceTrue, stancePre, labels=[0,1,2,3], average='macro')
-            accuracyRumor = (np.array(rumorTrue) == np.array(rumorPre)).sum() / len(rumorPre)
-            # accuracyStance = (np.array(stanceTrue) == np.array(stancePre)).sum() / len(stancePre)
+            # microF1Rumor = f1_score(rumorTrue, rumorPre, labels=[0,1,2], average='micro')
+            # macroF1Rumor = f1_score(rumorTrue, rumorPre, labels=[0,1,2], average='macro')
+            # accuracyRumor = (np.array(rumorTrue) == np.array(rumorPre)).sum() / len(rumorPre)
+            microF1Stance = f1_score(stanceTrue, stancePre, labels=[0,1,2,3], average='micro')
+            macroF1Stance = f1_score(stanceTrue, stancePre, labels=[0,1,2,3], average='macro')
+            accuracyStance = (np.array(stanceTrue) == np.array(stancePre)).sum() / len(stancePre)
             
 #==============================================
 # 保存rumor detection任务marco-F1最大时的模型
-            if(macroF1Rumor > maxMacroF1Rumor):
-                model.save(args.savePath)
+            # if(macroF1Rumor > maxMacroF1Rumor):
+            #     model.save(args.savePath)
 #==============================================
-            if totalLossRumor / len(devLoader) < minLossRumor:
-                earlyStopCounter = 0
-            else:
-                earlyStopCounter += 1
+            # if totalLossRumor / len(devLoader) < minLossRumor:
+            #     earlyStopCounter = 0
+            # else:
+            #     earlyStopCounter += 1
 
-            f.write('rumor detection:\n')
-            f.write('average loss: {:f}, accuracy: {:f}, micro-f1: {:f}, macro-f1: {:f}\n'.format(
-                totalLossRumor / len(loader), accuracyRumor, microF1Rumor, macroF1Rumor
-            ))
-            # f.write('stance analyze:\n')
+            # f.write('rumor detection:\n')
             # f.write('average loss: {:f}, accuracy: {:f}, micro-f1: {:f}, macro-f1: {:f}\n'.format(
-            #     totalLossStance / len(testIndex), accuracyStance, microF1Stance, macroF1Stance
+            #     totalLossRumor / len(loader), accuracyRumor, microF1Rumor, macroF1Rumor
             # ))
+            f.write('stance analyze:\n')
+            f.write('average loss: {:f}, accuracy: {:f}, micro-f1: {:f}, macro-f1: {:f}\n'.format(
+                totalLossStance / len(devLoader), 
+                accuracyStance, 
+                microF1Stance, 
+                macroF1Stance
+            ))
 
-            minLossRumor = min(minLossRumor, totalLossRumor / len(loader))
+            # minLossRumor = min(minLossRumor, totalLossRumor / len(loader))
             # minLossStance = min(minLossStance, totalLossStance / len(testIndex))
-            maxMacroF1Rumor = max(maxMacroF1Rumor, macroF1Rumor)
+            # maxMacroF1Rumor = max(maxMacroF1Rumor, macroF1Rumor)
             # maxMacroF1Stance = max(maxMacroF1Stance, macroF1Stance)
-            maxMicroF1Rumor = max(maxMicroF1Rumor, microF1Rumor)
+            # maxMicroF1Rumor = max(maxMicroF1Rumor, microF1Rumor)
             # maxMicroF1Stance = max(maxMicroF1Stance, microF1Stance)
-            maxAccuracyRumor = max(maxAccuracyRumor, accuracyRumor)
+            # maxAccuracyRumor = max(maxAccuracyRumor, accuracyRumor)
             # maxAccuracyStance = max(maxAccuracyStance, accuracyStance)
-            f.write('==========\n')
+            f.write('========================================\n')
         f.close()
-        if earlyStopCounter == 6:
-            print('early stop when loss on both task did not decrease')
-            break
+        # if earlyStopCounter == 6:
+        #     print('early stop when loss on both task did not decrease')
+        #     break
 # end main()
 
 if __name__ == '__main__':

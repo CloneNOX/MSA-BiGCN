@@ -75,10 +75,10 @@ class semEval2017Dataset(Dataset):
         return threadIndex, nodeText, edgeIndex
 
 # 把thread内的nodeFeature转化成Tensor，注意返回的需要是原数据的拷贝，不然会被更改
-def collate(batch, word2Vec, cls: torch.Tensor):
+def collate(batch):
     thread = batch[0]
     nodeText = []
     for text in thread['nodeText']: # nf: list[word, word...]
-        nodeText.append("<start>" + text + "<end>")
+        nodeText.append(("<start> " + text + " <end>").split(' '))
     thread['nodeText'] = nodeText
     return thread
