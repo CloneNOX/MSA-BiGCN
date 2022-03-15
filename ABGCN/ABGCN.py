@@ -78,7 +78,7 @@ class ABGCN(nn.Module):
         nodeText = thread['nodeText'].view(-1).to(self.device)
         nodeFeature = self.embed(nodeText).view(tuple(shape))
         nodeFeature, _ = self.wordAttention(nodeFeature, nodeFeature, nodeFeature)
-        nodeFeature = torch.tanh(self.s2vFc(nodeFeature))
+        # nodeFeature = torch.tanh(self.s2vFc(nodeFeature))
 
         # stance classification:
         nodeFeature, _ = self.stanceAttention(nodeFeature, nodeFeature, nodeFeature)
@@ -125,7 +125,7 @@ class ABGCN(nn.Module):
 
 # GCN实现
 class GCN(torch.nn.Module):
-    def __init__(self, inputDim, hiddenDim, outDim, dropout=0.5):
+    def __init__(self, inputDim, hiddenDim, outDim, numLayer, dropout=0.5):
         super(GCN, self).__init__()
         self.conv1 = GCNConv(inputDim, hiddenDim)
         self.conv2 = GCNConv(hiddenDim + inputDim, outDim)
@@ -165,10 +165,10 @@ class GCN(torch.nn.Module):
 
 # BiGCN
 class BiGCN(torch.nn.Module):
-    def __init__(self, inputDim, hiddenDim, convOutDim, NumRumorTag):
+    def __init__(self, inputDim, hiddenDim, convOutDim, NumRumorTag, numLayers, dropout):
         super(BiGCN, self).__init__()
-        self.TDGCN = GCN(inputDim, hiddenDim, convOutDim)
-        self.BUGCN = GCN(inputDim, hiddenDim, convOutDim)
+        self.TDGCN = GCN(inputDim, hiddenDim, convOutDim, numLayers, dropout)
+        self.BUGCN = GCN(inputDim, hiddenDim, convOutDim, numLayers, dropout)
         self.fc=torch.nn.Linear((convOutDim + hiddenDim) * 2, NumRumorTag)
 
     def forward(self, dataTD, dataBU):

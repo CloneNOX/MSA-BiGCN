@@ -22,10 +22,10 @@ parser.add_argument('--w2vDim', type=int, default=100,\
                     help='dimention of word2vec, default: 100')
 parser.add_argument('--s2vDim' ,type=int, default=128,\
                     help='dimention of sentence2vec(get from lstm/attention)')
-parser.add_argument('--w2vAttentionHeads', type=int, default=5,\
-                    help='heads of multi-heads self-attention in word2vec layer, default: 5')
-parser.add_argument('--s2vAttentionHeads', type=int, default=8,\
-                    help='heads of multi-heads self-attention in sentence2vec layer, default: 8')
+parser.add_argument('--w2vAttentionHeads', type=int, default=1,\
+                    help='heads of multi-heads self-attention in word2vec layer, default: 1')
+parser.add_argument('--s2vAttentionHeads', type=int, default=1,\
+                    help='heads of multi-heads self-attention in sentence2vec layer, default: 1')
 parser.add_argument('--gcnHiddenDim', type=int, default=256,\
                     help='dimention of GCN hidden layer, default: 128')
 parser.add_argument('--rumorFeatureDim', type=int, default=256,\
@@ -143,8 +143,9 @@ def main():
         )
     
     start = 1
-    minLoss = float('inf')
+    # 记录验证集上的最好性能，用于early stop
     earlyStopCounter = 0
+    sumF1 = 0.
 
     for epoch in range(start, args.epoch + 1):
         f = open(args.logName, 'a')
@@ -156,12 +157,11 @@ def main():
         stanceTrue = []
         stancePre = []
         totalLoss = 0.
-        F1sum = 0.
         
         model.train()
         for thread in tqdm(
             iter(loader), 
-            desc="[epoch {:d}] ".format(epoch), 
+            desc="[epoch: {:d}] ".format(epoch), 
             leave=False, 
             ncols=100
         ):
@@ -221,7 +221,7 @@ def main():
             model.eval()
             for thread in tqdm(
                 iter(devLoader), 
-                desc="[epoch {:d}, test]".format(epoch), 
+                desc="[epoch: {:d}, test]".format(epoch), 
                 leave=False, 
                 ncols=80
             ):
@@ -259,11 +259,12 @@ def main():
             accStance = (np.array(stanceTrue) == np.array(stancePre)).sum() / len(stancePre)
             
 #==============================================
-# 保存验证集marco F1 最大时的模型
-            if macroF1Rumor + macroF1Stance > F1sum:
+# 保存验证集marco F1和最大时的模型
+            if macroF1Rumor + macroF1Stance > sumF1:
                 model.save(args.savePath)
                 earlyStopCounter = 0
                 saveStatus = {
+                    'epoch': epoch,
                     'microF1Rumor': microF1Rumor,
                     'macroF1Rumor': macroF1Rumor,
                     'microF1Stance': microF1Stance,
@@ -272,7 +273,8 @@ def main():
                     'accStance': accStance,
                     'loss': totalLoss / len(devLoader)
                 }
-                F1sum = max(F1sum, macroF1Rumor + macroF1Stance)
+                sumF1 = max(sumF1, macroF1Rumor + macroF1Stance)
+                f.write('saved model\n')
             else:
                 earlyStopCounter += 1
 #==============================================
@@ -289,9 +291,10 @@ def main():
                 microF1Stance, 
                 macroF1Stance
             ))
+            f.write('early stop counter: {:d}\n'.format(earlyStopCounter))
             f.write('========================================\n')
         f.close()
-        if earlyStopCounter == 10: # 验证集上
+        if earlyStopCounter >= 50: # 验证集上
             print('early stop when F1 on dev set did not increase')
             break
     print(saveStatus)
