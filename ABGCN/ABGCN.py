@@ -53,13 +53,26 @@ class ABGCN(nn.Module):
             dropout = dropout,
             batch_first = True
         )
-        self.s2vFc = nn.Linear(self.w2vDim, self.s2vDim)
+        self.s2vRumor = nn.Linear(self.w2vDim, self.s2vDim)
+        self.s2vStance = nn.Linear(self.w2vDim, self.s2vDim)
         
         # GCN 谣言检测模块
         if needStance:
-            self.biGCN = BiGCN(2 * self.s2vDim, self.gcnHiddenDim, self.rumorFeatureDim, self.numRumorTag)
+            self.biGCN = BiGCN(
+                2 * self.s2vDim, 
+                self.gcnHiddenDim, 
+                self.rumorFeatureDim, 
+                self.numRumorTag, 
+                numLayers = 2,
+                dropout = dropout)
         else:
-            self.biGCN = BiGCN(self.s2vDim, self.gcnHiddenDim, self.rumorFeatureDim, self.numRumorTag)
+            self.biGCN = BiGCN(
+                self.s2vDim, 
+                self.gcnHiddenDim, 
+                self.rumorFeatureDim, 
+                self.numRumorTag, 
+                numLayers = 2,
+                dropout = dropout)
         self.RumorFc = nn.Linear((rumorFeatureDim + gcnHiddenDim) * 2, numRumorTag)
 
         # Attention立场分析模块
@@ -78,13 +91,12 @@ class ABGCN(nn.Module):
         nodeText = thread['nodeText'].view(-1).to(self.device)
         nodeFeature = self.embed(nodeText).view(tuple(shape))
         nodeFeature, _ = self.wordAttention(nodeFeature, nodeFeature, nodeFeature)
-        # nodeFeature = torch.tanh(self.s2vFc(nodeFeature))
-
-        # stance classification:
-        nodeFeature, _ = self.stanceAttention(nodeFeature, nodeFeature, nodeFeature)
-        # 取出<start> token对应的Attention得分作为节点的stance特征
+        
+        # stance classification: 取出<start> token对应的Attention得分作为节点的stance特征
+        stanceFeatureAll = torch.tanh(self.s2vStance(nodeFeature))
+        stanceFeatureAll, _ = self.stanceAttention(stanceFeatureAll, stanceFeatureAll, stanceFeatureAll)
         stanceFeature = []
-        for post in nodeFeature:
+        for post in stanceFeatureAll:
             stanceFeature.append(post[0])
         stanceFeature = torch.stack(stanceFeature, dim = 0)
         
@@ -94,8 +106,9 @@ class ABGCN(nn.Module):
         for post in nodeFeature:
             s2v.append(post[0])
         s2v = torch.stack(s2v, dim = 0)
+        s2v = torch.tanh(self.s2vRumor(s2v))
         # rumor detection的预测需要结合stance feature
-        if self.needStance: 
+        if self.needStance:
             s2v = torch.cat([s2v, stanceFeature], dim = 1) 
         dataTD = Data(
             x = torch.clone(s2v).to(self.device), 
@@ -125,7 +138,7 @@ class ABGCN(nn.Module):
 
 # GCN实现
 class GCN(torch.nn.Module):
-    def __init__(self, inputDim, hiddenDim, outDim, numLayer, dropout=0.5):
+    def __init__(self, inputDim, hiddenDim, outDim, numLayers = 2, dropout=0.5):
         super(GCN, self).__init__()
         self.conv1 = GCNConv(inputDim, hiddenDim)
         self.conv2 = GCNConv(hiddenDim + inputDim, outDim)
@@ -134,12 +147,12 @@ class GCN(torch.nn.Module):
     def forward(self, data):
         posts, edge_index, rootIndex = data.x, data.edgeIndex, data.rootIndex # posts(n, inputDim), edgeIndex(2, |E|)
         
-        conv1Out = self.conv1(posts, edge_index)
         postRoot = torch.clone(posts[rootIndex])
         postRoot = postRoot.repeat(posts.shape[0], 1)
+        conv1Out = self.conv1(posts, edge_index)
         conv1Root = conv1Out[rootIndex]
 
-        conv2In = torch.cat([conv1Out, postRoot], dim=1)
+        conv2In = torch.cat([postRoot, conv1Out], dim=1)
         conv2In = F.relu(conv2In)
         conv2In = F.dropout(conv2In, training=self.training, p=self.dropout) # BiGCN对于dropout的实现，一次卷积之后随机舍弃一些点
         conv2Out = self.conv2(conv2In, edge_index)
@@ -165,7 +178,7 @@ class GCN(torch.nn.Module):
 
 # BiGCN
 class BiGCN(torch.nn.Module):
-    def __init__(self, inputDim, hiddenDim, convOutDim, NumRumorTag, numLayers, dropout):
+    def __init__(self, inputDim, hiddenDim, convOutDim, NumRumorTag, numLayers = 2, dropout = 0.5):
         super(BiGCN, self).__init__()
         self.TDGCN = GCN(inputDim, hiddenDim, convOutDim, numLayers, dropout)
         self.BUGCN = GCN(inputDim, hiddenDim, convOutDim, numLayers, dropout)

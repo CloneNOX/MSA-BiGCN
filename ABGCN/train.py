@@ -22,9 +22,9 @@ parser.add_argument('--w2vDim', type=int, default=100,\
                     help='dimention of word2vec, default: 100')
 parser.add_argument('--s2vDim' ,type=int, default=128,\
                     help='dimention of sentence2vec(get from lstm/attention)')
-parser.add_argument('--w2vAttentionHeads', type=int, default=1,\
+parser.add_argument('--w2vAttHeads', type=int, default=1,\
                     help='heads of multi-heads self-attention in word2vec layer, default: 1')
-parser.add_argument('--s2vAttentionHeads', type=int, default=1,\
+parser.add_argument('--s2vAttHeads', type=int, default=1,\
                     help='heads of multi-heads self-attention in sentence2vec layer, default: 1')
 parser.add_argument('--gcnHiddenDim', type=int, default=256,\
                     help='dimention of GCN hidden layer, default: 128')
@@ -42,9 +42,9 @@ parser.add_argument('--w2vPath', type=str, default='../dataset/glove/',\
 # train parameters
 parser.add_argument('--optimizer', type=str, default='Adam',\
                     help='set optimizer type in [SGD/Adam], default: Adam')
-parser.add_argument('--lr', type=float, default=1e-4,\
+parser.add_argument('--lr', type=float, default=3e-4,\
                     help='set learning rate, default: 0.0001')
-parser.add_argument('--weightDecay', type=float, default=1e-3,\
+parser.add_argument('--weightDecay', type=float, default=5e-4,\
                     help='set weight decay for L2 Regularization, default: 0.001')
 parser.add_argument('--epoch', type=int, default=100,\
                     help='epoch to train, default: 100')
@@ -120,27 +120,26 @@ def main():
         rumorFeatureDim = args.rumorFeatureDim,
         numRumorTag = len(label2IndexRumor),
         numStanceTag = len(label2IndexStance),
-        w2vAttentionHeads = args.w2vAttentionHeads,
-        s2vAttentionHeads = args.s2vAttentionHeads,
+        w2vAttentionHeads = args.w2vAttHeads,
+        s2vAttentionHeads = args.s2vAttHeads,
         dropout = args.dropout
 
     )
     model = model.set_device(device)
     print(model)
     loss_func = torch.nn.CrossEntropyLoss(reduction='mean').to(device)
+    GCNParams = list(map(id, model.biGCN.parameters()))
+    baseParams = filter(lambda p:id(p) not in GCNParams, model.parameters())
     if args.optimizer == 'Adam':
-        optimizer = optim.AdamW(
-            model.parameters(), 
-            lr = args.lr, 
-            weight_decay = args.weightDecay
-        )
+        optimizer = optim.AdamW([
+            {'params': baseParams},
+            {'params': model.biGCN.parameters(), 'lr': args.lr / 5}
+        ], lr = args.lr, weight_decay = args.weightDecay)
     else:
-        optimizer = optim.SGD(
-            model.parameters(), 
-            lr = args.lr, 
-            momentum = 0.9,
-            weight_decay = args.weightDecay
-        )
+        optimizer = optim.SGD([
+            {'params': baseParams},
+            {'params': GCNParams, 'lr': args.lr / 5}
+        ], lr = args.lr, momentum = 0.9, weight_decay = args.weightDecay)
     
     start = 1
     # 记录验证集上的最好性能，用于early stop
@@ -149,7 +148,7 @@ def main():
 
     for epoch in range(start, args.epoch + 1):
         f = open(args.logName, 'a')
-        f.write('[epoch {:d}] '.format(epoch))
+        f.write('[epoch: {:d}] '.format(epoch))
 
         # 训练模型
         rumorTrue = []
@@ -294,7 +293,7 @@ def main():
             f.write('early stop counter: {:d}\n'.format(earlyStopCounter))
             f.write('========================================\n')
         f.close()
-        if earlyStopCounter >= 50: # 验证集上
+        if earlyStopCounter >= 50: # 验证集上连续多次测试性能没有提升就早停
             print('early stop when F1 on dev set did not increase')
             break
     print(saveStatus)

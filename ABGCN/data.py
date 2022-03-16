@@ -5,7 +5,7 @@ import json
 from gensim.models.keyedvectors import KeyedVectors
 from utils import flattenStructure
 from torch.nn.utils.rnn import pad_sequence
-from copy import copy
+from copy import deepcopy
 
 class semEval2017Dataset(Dataset):
     def __init__(self, dataPath: str, type: str) -> None:
@@ -76,7 +76,7 @@ class semEval2017Dataset(Dataset):
 
 # 把thread内的nodeFeature转化成Tensor，注意返回的需要是原数据的拷贝，不然会被更改
 def collate(batch):
-    thread = batch[0]
+    thread = deepcopy(batch[0])
     nodeText = []
     for text in thread['nodeText']: # nf: list[word, word...]
         nodeText.append(("<start> " + text + " <end>").split(' '))
