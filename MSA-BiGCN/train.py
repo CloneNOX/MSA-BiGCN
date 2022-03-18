@@ -10,7 +10,6 @@ from data import *
 from ABGCN import *
 from sklearn.metrics import f1_score
 from utils import *
-from random import randint, shuffle
 from tqdm import tqdm
 from copy import copy
 import sys
@@ -42,7 +41,7 @@ parser.add_argument('--w2vPath', type=str, default='../dataset/glove/',\
 # train parameters
 parser.add_argument('--optimizer', type=str, default='Adam',\
                     help='set optimizer type in [SGD/Adam], default: Adam')
-parser.add_argument('--lr', type=float, default=3e-4,\
+parser.add_argument('--lr', type=float, default=1e-4,\
                     help='set learning rate, default: 0.0001')
 parser.add_argument('--weightDecay', type=float, default=5e-4,\
                     help='set weight decay for L2 Regularization, default: 0.001')
@@ -297,6 +296,14 @@ def main():
             print('early stop when F1 on dev set did not increase')
             break
     print(saveStatus)
+    with open(args.logName, 'a') as f:
+        f.write('\n\nsave model at epoch {:d},\
+                \nmarco F1 rumor: {:f}, acc rumor {:f}\
+                \nmarco F1 stance: {:f}, acc stance: {:f}\n'.format(
+                    saveStatus['epoch'],
+                    saveStatus['macroF1Rumor'], saveStatus['accRumor'],
+                    saveStatus['macroF1Stance'], saveStatus['accStance']
+                ))
 # end main()
 
 if __name__ == '__main__':

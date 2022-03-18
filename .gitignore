@@ -278,6 +278,7 @@ oldPHEME/
 semeval2017-task8-dataset/
 semeval2017-task8-test-data/
 model/
+nohup.out
 *.png
 *.pdf
 *.zip

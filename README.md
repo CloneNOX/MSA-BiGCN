@@ -1,1 +1,1 @@
-# thesis
+# Multi-task Rumor Detection Based on Attention Mechanism and Graph Convolutional Networks
