@@ -65,11 +65,11 @@ def main():
         type = 'train'
     )
     loader = DataLoader(dataset, shuffle = True, num_workers = 4, collate_fn=collate)
-    devDataset = semEval2017Dataset(
+    testDataset = semEval2017Dataset(
         dataPath = args.dataPath, 
-        type = 'dev'
+        type = 'test'
     )
-    devLoader = DataLoader(devDataset, shuffle = True, num_workers = 4, collate_fn=collate)
+    testLoader = DataLoader(testDataset, shuffle = True, num_workers = 4, collate_fn=collate)
     with open(args.dataPath + 'trainSet.json', 'r') as f:
             content = f.read()
     rawDataset = json.loads(content)
@@ -144,6 +144,8 @@ def main():
     # 记录验证集上的最好性能，用于early stop
     earlyStopCounter = 0
     sumF1 = 0.
+    maxF1Rumor = float("-inf")
+    maxF1Stance = float("-inf")
 
     for epoch in range(start, args.epoch + 1):
         f = open(args.logName, 'a')
@@ -208,8 +210,8 @@ def main():
         ))
         
         # 测试并保存模型
-        if epoch % 5 == 0: # 每5个eopch进行一次测试，使用测试集数据
-            f.write('==================================================\ntest model on dev set\n')
+        if epoch % 5 == 0: # 每1个eopch进行一次测试，使用测试集数据
+            f.write('==================================================\ntest model on test set\n')
             rumorTrue = []
             rumorPre = []
             stanceTrue = []
@@ -218,7 +220,7 @@ def main():
 
             model.eval()
             for thread in tqdm(
-                iter(devLoader), 
+                iter(testLoader), 
                 desc="[epoch: {:d}, test]".format(epoch), 
                 leave=False, 
                 ncols=80
@@ -269,14 +271,14 @@ def main():
                     'macroF1Stance': macroF1Stance,
                     'accRumor': accRumor,
                     'accStance': accStance,
-                    'loss': totalLoss / len(devLoader)
+                    'loss': totalLoss / len(testLoader)
                 }
                 sumF1 = max(sumF1, macroF1Rumor + macroF1Stance)
                 f.write('saved model\n')
             else:
                 earlyStopCounter += 1
 #==============================================
-            f.write('average joint-loss: {:f}\n'.format(totalLoss / len(devLoader)))
+            f.write('average joint-loss: {:f}\n'.format(totalLoss / len(testLoader)))
             f.write('rumor detection:\n')
             f.write('accuracy: {:f}, micro-f1: {:f}, macro-f1: {:f}\n'.format(
                 accRumor, 
