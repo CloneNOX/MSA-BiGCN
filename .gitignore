@@ -290,3 +290,4 @@ nohup.out
 *.tar.bz2
 *.doc
 *.md
+*.out
