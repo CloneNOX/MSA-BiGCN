@@ -73,7 +73,7 @@ class ABGCN(nn.Module):
                 self.numRumorTag, 
                 numLayers = 2,
                 dropout = dropout)
-        self.RumorFc = nn.Linear((rumorFeatureDim + gcnHiddenDim) * 2, numRumorTag)
+        self.f2tRumor = nn.Linear((rumorFeatureDim + gcnHiddenDim) * 2, numRumorTag)
 
         # Attention立场分析模块
         self.stanceAttention = nn.MultiheadAttention(
@@ -82,7 +82,8 @@ class ABGCN(nn.Module):
             dropout = dropout,
             batch_first = True
         )
-        self.stanceFc = nn.Linear(self.s2vDim, numStanceTag)
+        self.stanceFc = nn.Linear(self.s2vDim, self.s2vDim)
+        self.f2tStance = nn.Linear(self.s2vDim, numStanceTag)
 
     # 根据输入的任务标识进行前向迭代，
     def forward(self, thread):
@@ -95,6 +96,7 @@ class ABGCN(nn.Module):
         # stance classification: 取出<start> token对应的Attention得分作为节点的stance特征
         stanceFeatureAll = torch.tanh(self.s2vStance(nodeFeature))
         stanceFeatureAll, _ = self.stanceAttention(stanceFeatureAll, stanceFeatureAll, stanceFeatureAll)
+        stanceFeatureAll = self.stanceFc(stanceFeatureAll)
         stanceFeature = []
         for post in stanceFeatureAll:
             stanceFeature.append(post[0])
@@ -122,7 +124,7 @@ class ABGCN(nn.Module):
         )
         rumorFeature = self.biGCN(dataTD, dataBU)
 
-        return self.RumorFc(rumorFeature), self.stanceFc(stanceFeature)
+        return self.f2tRumor(rumorFeature), self.f2tStance(stanceFeature)
 
     # 更换计算设备
     def set_device(self, device: torch.device) -> torch.nn.Module:
@@ -182,8 +184,7 @@ class BiGCN(torch.nn.Module):
         super(BiGCN, self).__init__()
         self.TDGCN = GCN(inputDim, hiddenDim, convOutDim, numLayers, dropout)
         self.BUGCN = GCN(inputDim, hiddenDim, convOutDim, numLayers, dropout)
-        self.fc=torch.nn.Linear((convOutDim + hiddenDim) * 2, NumRumorTag)
-
+        
     def forward(self, dataTD, dataBU):
         TDOut = self.TDGCN(dataTD)
         BUOut = self.BUGCN(dataBU)

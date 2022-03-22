@@ -1,32 +1,31 @@
 w2vDim = [25, 50, 100, 200]
 s2vDim = [64, 128, 256]
-w2vAttHeads = [5]
-s2vAttHeads = [8]
 gcnHiddenDim = [128, 256, 512]
+needStance = ['True', 'False']
+lossRatio = [1.0, 0.5, 2.0]
 
-with open('./paramRun.sh', 'w') as f:
-    for w2vD in w2vDim:
-        for s2vD in s2vDim:
-            for w2vH in w2vAttHeads:
-                for s2vH in s2vAttHeads:
+for need in needStance:
+    with open('./runNeedStance' + need + '.sh', 'w') as f:
+        for ratio in lossRatio:
+            for w2vD in w2vDim:
+                for s2vD in s2vDim:
                     for gcnH in gcnHiddenDim:
-                        if(w2vDim == 25 and w2vAttHeads == 10):
-                            continue
-                        order = 'python train.py --w2vDim {:d} --s2vDim {:d} --w2vAttHeads {:d} --s2vAttHeads {:d} --gcnHiddenDim {:d} --rumorFeatureDim {:d} --dropout 0.5 --lr 3e-4 --weightDecay 5e-4 --epoch 5000 '.format(
-                            w2vD,
-                            s2vD,
-                            w2vH,
-                            s2vH,
-                            gcnH,
-                            gcnH,
+                        order = 'python train.py '
+                        order += '--w2vDim {:d} '.format(w2vD)
+                        order += '--s2vDim {:d} '.format(s2vD)
+                        order += '--gcnHiddenDim {:d} --rumorFeatureDim {:d} '.format(gcnH, gcnH)
+                        order += '--w2vAttHeads 5 --s2vAttHeads 8 --dropout 0.5 --epoch 5000 '  
+                        order += '--needStance ' + need + ' --lossRatio {:.2f} '.format(ratio)
+                        order += '--logName ./log/needStance-{:s}/lossRatio-{:.2f}/{:d}w2vdim-{:d}s2vdim-{:d}hidden.txt '.format(
+                            need, ratio, w2vD, s2vD, gcnH
                         )
-                        order += '--logName ./log/test-adam-lr3e-4/{:d}w2vdim-{:d}s2vdim-{:d}w2vhead-{:d}s2vhead-{:d}hidden.txt '.format(
-                            w2vD, s2vD, w2vH, s2vH, gcnH, gcnH,
+                        order += '--savePath ./model/needStance-{:s}/lossRatio-{:.2f}/{:d}w2vdim-{:d}s2vdim-{:d}hidden.pt '.format(
+                            need, ratio, w2vD, s2vD, gcnH
                         )
-                        order += '--savePath ./model/test-adam-lr3e-4/{:d}w2vdim-{:d}s2vdim-{:d}w2vhead-{:d}s2vhead-{:d}hidden.pt '.format(
-                            w2vD, s2vD, w2vH, s2vH, gcnH, gcnH,
-                        )
-                        #order += '--optimizer SGD'
+                        if need == 'True':
+                            order += '--device cuda:0 '
+                        else:
+                            order += '--device cuda:1 '
                         order += "\n"
                         f.write(order)
                         

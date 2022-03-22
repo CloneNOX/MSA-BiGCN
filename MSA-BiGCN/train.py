@@ -31,7 +31,7 @@ parser.add_argument('--rumorFeatureDim', type=int, default=256,\
                     help='dimention of GCN output, default: 128')
 parser.add_argument('--dropout', type=float, default=0.0,\
                     help='dropout rate for model, default: 0.0')
-parser.add_argument('--needStance', type=bool, default=True,\
+parser.add_argument('--needStance', type=str, default='True',\
                     help='whether use stance feature in rumor detection, default: True')
 # dataset parameters
 parser.add_argument('--dataPath', type=str, default='../dataset/semeval2017-task8/',\
@@ -41,10 +41,10 @@ parser.add_argument('--w2vPath', type=str, default='../dataset/glove/',\
 # train parameters
 parser.add_argument('--optimizer', type=str, default='Adam',\
                     help='set optimizer type in [SGD/Adam], default: Adam')
-parser.add_argument('--lr', type=float, default=1e-4,\
-                    help='set learning rate, default: 0.0001')
+parser.add_argument('--lr', type=float, default=3e-4,\
+                    help='set learning rate, default: 3e-4')
 parser.add_argument('--weightDecay', type=float, default=5e-4,\
-                    help='set weight decay for L2 Regularization, default: 0.001')
+                    help='set weight decay for L2 Regularization, default: 5e-4')
 parser.add_argument('--epoch', type=int, default=100,\
                     help='epoch to train, default: 100')
 parser.add_argument('--device', type=str, default='cuda',\
@@ -53,6 +53,8 @@ parser.add_argument('--logName', type=str, default='./log/log.txt',\
                     help='log file name, default: log.txt')
 parser.add_argument('--savePath', type=str, default='./model/model.pt',\
                     help='path to save model')
+parser.add_argument('--lossRatio', type=float, default=1.,\
+                    help='ratio for loss-on-rumor:loss-on-stance, default: 1.0')
 
 def main():
     args = parser.parse_args()
@@ -121,8 +123,8 @@ def main():
         numStanceTag = len(label2IndexStance),
         w2vAttentionHeads = args.w2vAttHeads,
         s2vAttentionHeads = args.s2vAttHeads,
-        dropout = args.dropout
-
+        dropout = args.dropout,
+        needStance = True if args.needStance == 'True' else False
     )
     model = model.set_device(device)
     print(model)
@@ -144,8 +146,18 @@ def main():
     # 记录验证集上的最好性能，用于early stop
     earlyStopCounter = 0
     sumF1 = 0.
-    maxF1Rumor = float("-inf")
-    maxF1Stance = float("-inf")
+
+    trainRumorAcc = []
+    trainRumorF1 = []
+    trainStanceAcc = []
+    trainStanceF1 = []
+    trainLoss = []
+
+    testRumorAcc = []
+    testRumorF1 = []
+    testStanceAcc = []
+    testStanceF1 = []
+    testLoss = []
 
     for epoch in range(start, args.epoch + 1):
         f = open(args.logName, 'a')
@@ -184,7 +196,8 @@ def main():
 
             optimizer.zero_grad()
             rumorPredict, stancePredict = model.forward(thread)
-            loss = loss_func(rumorPredict, rumorTag) + loss_func(stancePredict, stanceTag)
+            loss = (args.lossRatio / (1 + args.lossRatio)) * loss_func(rumorPredict, rumorTag) \
+                 + (1 / (1 + args.lossRatio)) * loss_func(stancePredict, stanceTag)
             totalLoss += loss
             loss.backward()
             optimizer.step()
@@ -196,19 +209,24 @@ def main():
         f.write('average loss: {:f}\n'.format(
             totalLoss / len(loader)
         ))
+        trainLoss.append((totalLoss / len(loader)).item())
         macroF1 = f1_score(rumorTrue, rumorPre, labels=[0,1,2], average='macro')
         acc = (np.array(rumorTrue) == np.array(rumorPre)).sum() / len(rumorTrue)
         f.write("    rumor detection accuracy: {:.4f}, macro-f1: {:.4f}\n".format(
             acc,
             macroF1
         ))
+        trainRumorAcc.append(acc)
+        trainRumorF1.append(macroF1)
         macroF1 = f1_score(stanceTrue, stancePre, labels=[0,1,2,3], average='macro')
         acc = (np.array(stanceTrue) == np.array(stancePre)).sum() / len(stanceTrue)
         f.write("    stance classification accuracy: {:.4f}, macro-f1: {:.4f}\n".format(
             acc,
             macroF1
         ))
-        
+        trainStanceAcc.append(acc)
+        trainStanceF1.append(macroF1)
+    
         # 测试并保存模型
         if epoch % 5 == 0: # 每1个eopch进行一次测试，使用测试集数据
             f.write('==================================================\ntest model on test set\n')
@@ -243,7 +261,8 @@ def main():
                 thread['nodeText'] = nodeText
                 
                 rumorPredict, stancePredict = model.forward(thread)
-                loss = loss_func(rumorPredict, rumorTag) + loss_func(stancePredict, stanceTag)
+                loss = (args.lossRatio / (1 + args.lossRatio)) * loss_func(rumorPredict, rumorTag)\
+                     + (1 / (1 + args.lossRatio)) * loss_func(stancePredict, stanceTag)
                 totalLoss += loss
 
                 rumorPredict = softmax(rumorPredict, dim=1)
@@ -251,10 +270,10 @@ def main():
                 stancePredict = softmax(stancePredict, dim=1)
                 stancePre += stancePredict.max(dim=1)[1].tolist()
             
-            microF1Rumor = f1_score(rumorTrue, rumorPre, labels=[0,1,2], average='micro')
+            # microF1Rumor = f1_score(rumorTrue, rumorPre, labels=[0,1,2], average='micro')
             macroF1Rumor = f1_score(rumorTrue, rumorPre, labels=[0,1,2], average='macro')
             accRumor = (np.array(rumorTrue) == np.array(rumorPre)).sum() / len(rumorPre)
-            microF1Stance = f1_score(stanceTrue, stancePre, labels=[0,1,2,3], average='micro')
+            # microF1Stance = f1_score(stanceTrue, stancePre, labels=[0,1,2,3], average='micro')
             macroF1Stance = f1_score(stanceTrue, stancePre, labels=[0,1,2,3], average='macro')
             accStance = (np.array(stanceTrue) == np.array(stancePre)).sum() / len(stancePre)
             
@@ -265,13 +284,13 @@ def main():
                 earlyStopCounter = 0
                 saveStatus = {
                     'epoch': epoch,
-                    'microF1Rumor': microF1Rumor,
+                    # 'microF1Rumor': microF1Rumor,
                     'macroF1Rumor': macroF1Rumor,
-                    'microF1Stance': microF1Stance,
+                    # 'microF1Stance': microF1Stance,
                     'macroF1Stance': macroF1Stance,
                     'accRumor': accRumor,
                     'accStance': accStance,
-                    'loss': totalLoss / len(testLoader)
+                    'loss': (totalLoss / len(testLoader)).item()
                 }
                 sumF1 = max(sumF1, macroF1Rumor + macroF1Stance)
                 f.write('saved model\n')
@@ -280,19 +299,24 @@ def main():
 #==============================================
             f.write('average joint-loss: {:f}\n'.format(totalLoss / len(testLoader)))
             f.write('rumor detection:\n')
-            f.write('accuracy: {:f}, micro-f1: {:f}, macro-f1: {:f}\n'.format(
+            f.write('accuracy: {:f}, macro-f1: {:f}\n'.format(
                 accRumor, 
-                microF1Rumor, 
+                # microF1Rumor, 
                 macroF1Rumor
             ))
             f.write('stance analyze:\n')
-            f.write('accuracy: {:f}, micro-f1: {:f}, macro-f1: {:f}\n'.format(
+            f.write('accuracy: {:f}, macro-f1: {:f}\n'.format(
                 accStance, 
-                microF1Stance, 
+                # microF1Stance, 
                 macroF1Stance
             ))
             f.write('early stop counter: {:d}\n'.format(earlyStopCounter))
             f.write('========================================\n')
+            testLoss.append((totalLoss / len(testLoader)).item())
+            testRumorAcc.append(accRumor)
+            testRumorF1.append(macroF1Rumor)
+            testStanceAcc.append(accStance)
+            testStanceF1.append(macroF1Stance)
         f.close()
         if earlyStopCounter >= 50: # 验证集上连续多次测试性能没有提升就早停
             print('early stop when F1 on dev set did not increase')
@@ -306,6 +330,20 @@ def main():
                     saveStatus['macroF1Rumor'], saveStatus['accRumor'],
                     saveStatus['macroF1Stance'], saveStatus['accStance']
                 ))
+
+    saveStatus['trainRumorAcc'] = trainRumorAcc
+    saveStatus['trainRumorF1'] = trainRumorF1
+    saveStatus['trainStanceAcc'] = trainStanceAcc
+    saveStatus['trainStanceF1'] = trainStanceF1
+    saveStatus['trainLoss'] = trainLoss
+
+    saveStatus['testRumorAcc'] = testRumorAcc
+    saveStatus['testRumorF1'] = testRumorF1
+    saveStatus['testStanceAcc'] = testStanceAcc
+    saveStatus['testStanceF1'] = testStanceF1
+    saveStatus['testLoss'] = testLoss
+    with open(args.logName[:-4] + '.json', 'w') as f:
+        f.write(json.dumps(saveStatus))
 # end main()
 
 if __name__ == '__main__':

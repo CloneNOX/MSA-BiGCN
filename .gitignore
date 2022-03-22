@@ -277,6 +277,7 @@ oldPHEME/
 学位论文相关资料/
 semeval2017-task8-dataset/
 semeval2017-task8-test-data/
+log/
 model/
 nohup.out
 *.png
