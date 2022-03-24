@@ -7,7 +7,7 @@ from torch.utils.data import DataLoader
 import argparse
 import numpy as np
 from data import *
-from ABGCN import *
+from MSABiGCN import *
 from sklearn.metrics import f1_score
 from utils import *
 from tqdm import tqdm
@@ -146,8 +146,6 @@ def main():
     # 记录验证集上的最好性能，用于early stop
     earlyStopCounter = 0
     sumF1 = 0.
-    savedF1Rumor = 0.
-    savedF1Stance = 0.
 
     trainRumorAcc = []
     trainRumorF1 = []

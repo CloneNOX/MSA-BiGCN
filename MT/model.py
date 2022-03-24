@@ -3,15 +3,17 @@ import torch.nn as nn
 from torch.nn.modules.module import Module
 
 class MTUS(nn.Module):
-    def __init__(self,
-                 inputDim: int,
-                 numRumorClass: int,
-                 numStanceClass: int,  
-                 numGRULayer=2, 
-                 embeddingDim=100, 
-                 hiddenDim=100,
-                 batchSize = 1, 
-                 bidirectional = False):
+    def __init__(
+        self,
+        inputDim: int,
+        numRumorClass: int,
+        numStanceClass: int,  
+        numGRULayer=2, 
+        embeddingDim=100, 
+        hiddenDim=100,
+        batchSize = 1, 
+        bidirectional = False
+    ):
         super().__init__() # 调用nn.Moudle父类的初始化方法
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu') # 优先使用cuda
         self.embeddingDim = embeddingDim

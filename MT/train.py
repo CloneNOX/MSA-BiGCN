@@ -2,10 +2,12 @@ import json
 import torch
 import argparse
 import numpy as np
+from data import *
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics import f1_score
 from torch import optim
 from torch.nn.functional import softmax
+from torch.utils.data import DataLoader
 from model import *
 from utils import *
 from random import randint, shuffle
@@ -24,20 +26,20 @@ parser.add_argument('--bidirectional', type=bool, default=False,\
                     help='whether use bi-directional GRU, default: False')
 parser.add_argument('--modelType', type=str, default='mtus',\
                     help='select model type between mtus and mtes, default: mtus')
-parser.add_argument('--s2mType', type=str, default='cat',\
+parser.add_argument('--s2mType', type=str, default='add',\
                     help='select way(add/cat) to get intput for GRU in dfferent mission, only used in mtes, default: cat')
 # dataset parameters
 parser.add_argument('--dataPath', type=str, default='../dataset/semeval2017-task8/',\
                     help='path to semeval2017 task8 dataset, default: ../dataset/semeval2017-task8/')
 # train parameters
-parser.add_argument('--lr', type=float, default=1e-3,\
-                    help='set learning rate, default: 0.001')
-parser.add_argument('--weightDecay', type=float, default=1e-2,\
-                    help='set weight decay for L2 Regularization, default: 0.01')
+parser.add_argument('--lr', type=float, default=3e-4,\
+                    help='set learning rate, default: 0.0003')
+parser.add_argument('--weightDecay', type=float, default=5e-4,\
+                    help='set weight decay for L2 Regularization, default: 0.0005')
 parser.add_argument('--epoch', type=int, default=100,\
                     help='epoch to train, default: 100')
-parser.add_argument('--device', type=str, default='cpu',\
-                    help='select device(cuda:0/cpu), default: cpu')
+parser.add_argument('--device', type=str, default='cuda',\
+                    help='select device(cuda:0/cpu), default: cuda')
 parser.add_argument('--logPath', type=str, default='./log/log.txt',\
                     help='log file name, default: log.txt')
 parser.add_argument('--savePath', type=str, default='./model/model.pt',\
@@ -45,24 +47,40 @@ parser.add_argument('--savePath', type=str, default='./model/model.pt',\
 
 def main():
     args = parser.parse_args()
+    
     trainSet, label2IndexRumor, label2IndexStance, tfidf_vec = getTrainSet(args.dataPath)
-    testSet, _, _ = getDevTestSet(args.dataPath, 'dev', tfidf_vec)
+    #_, _, _ = getDevTestSet(args.dataPath, 'test', tfidf_vec)
 
+    inputDim = trainSet[0][0].size()[1]
+    trainSet = semEval2017Dataset(
+        dataPath = args.dataPath, 
+        type = 'train'
+    )
+    trainLoader = DataLoader()
+    testSet = semEval2017Dataset(
+        dataPath = args.dataPath,
+        type = 'test'
+    )
+    
     if args.modelType == 'mtus':
-        model = MTUS(embeddingDim=args.embeddingDim, 
-                     hiddenDim=args.hiddenDim,
-                     inputDim=trainSet[0][0].size()[1], 
-                     numGRULayer=args.gruLayer,
-                     numRumorClass=len(label2IndexRumor),
-                     numStanceClass=len(label2IndexStance))
+        model = MTUS(
+            embeddingDim=args.embeddingDim, 
+            hiddenDim=args.hiddenDim,
+            inputDim=trainSet[0][0].size()[1], 
+            numGRULayer=args.gruLayer,
+            numRumorClass=len(label2IndexRumor),
+            numStanceClass=len(label2IndexStance)
+        )
     elif args.modelType == 'mtes':
-        model = MTES(embeddingDim=args.embeddingDim, 
-                     hiddenDim=args.hiddenDim,
-                     inputDim=trainSet[0][0].size()[1], 
-                     numGRULayer=args.gruLayer,
-                     typeUS2M=args.s2mType,
-                     numRumorClass=len(label2IndexRumor),
-                     numStanceClass=len(label2IndexStance))
+        model = MTES(
+            embeddingDim=args.embeddingDim, 
+            hiddenDim=args.hiddenDim,
+            inputDim=trainSet[0][0].size()[1], 
+            numGRULayer=args.gruLayer,
+            typeUS2M=args.s2mType,
+            numRumorClass=len(label2IndexRumor),
+            numStanceClass=len(label2IndexStance)
+        )
     else:
         return
     f = open(args.logPath, 'w')
@@ -80,7 +98,7 @@ def main():
     print(model)
 
     loss_func = torch.nn.CrossEntropyLoss(reduction='mean').to(device)
-    optimizer = optim.Adagrad(model.parameters(), lr=args.lr, weight_decay=args.weightDecay) # 优化器，原文使用AdaGrad
+    optimizer = optim.AdamW(model.parameters(), lr=args.lr, weight_decay=args.weightDecay) # 优化器，原文使用AdaGrad
     
     start = 1
     minLossRumor = float('inf')
@@ -254,7 +272,7 @@ def getTrainSet(dataSetPath:str):
     for thread in threads:
         for text in thread:
             cropus.append(text)
-    tfidf_vec = TfidfVectorizer()
+    tfidf_vec = TfidfVectorizer(max_features = 5000)
     tfidf_matrix = tfidf_vec.fit_transform(cropus).toarray()
     counter = 0
     for i in range(len(threads)):
@@ -262,7 +280,7 @@ def getTrainSet(dataSetPath:str):
         for _ in threads[i]:
             tfidf.append(tfidf_matrix[counter])
             counter += 1
-        threads[i] = torch.Tensor(tfidf)
+        threads[i] = torch.Tensor(np.array(tfidf))
 
     label2IndexRumor = trainSet['label2IndexRumor']
     label2IndexStance = trainSet['label2IndexStance']
@@ -308,7 +326,7 @@ def getDevTestSet(dataPath: str, type: str, tfidf_vec):
         for _ in threads[i]:
             tfidf.append(tfidf_matrix[counter])
             counter += 1
-        threads[i] = torch.Tensor(tfidf)
+        threads[i] = torch.Tensor(np.array(tfidf))
 
     label2IndexRumor = testSet['label2IndexRumor']
     label2IndexStance = testSet['label2IndexStance']
