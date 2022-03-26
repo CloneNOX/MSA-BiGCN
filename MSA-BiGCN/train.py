@@ -7,7 +7,7 @@ from torch.utils.data import DataLoader
 import argparse
 import numpy as np
 from data import *
-from ABGCN import *
+from MSABiGCN import *
 from sklearn.metrics import f1_score
 from utils import *
 from tqdm import tqdm
@@ -21,28 +21,30 @@ parser.add_argument('--w2vDim', type=int, default=100,\
                     help='dimention of word2vec, default: 100')
 parser.add_argument('--s2vDim' ,type=int, default=128,\
                     help='dimention of sentence2vec(get from lstm/attention)')
-parser.add_argument('--w2vAttHeads', type=int, default=1,\
-                    help='heads of multi-heads self-attention in word2vec layer, default: 1')
-parser.add_argument('--s2vAttHeads', type=int, default=1,\
-                    help='heads of multi-heads self-attention in sentence2vec layer, default: 1')
+parser.add_argument('--w2vAttHeads', type=int, default=5,\
+                    help='heads of multi-heads self-attention in word2vec layer, default: 5')
+parser.add_argument('--s2vAttHeads', type=int, default=8,\
+                    help='heads of multi-heads self-attention in sentence2vec layer, default: 8')
 parser.add_argument('--gcnHiddenDim', type=int, default=256,\
                     help='dimention of GCN hidden layer, default: 128')
 parser.add_argument('--rumorFeatureDim', type=int, default=256,\
                     help='dimention of GCN output, default: 128')
 parser.add_argument('--dropout', type=float, default=0.0,\
                     help='dropout rate for model, default: 0.0')
+parser.add_argument('--edgeDropoutRate', type=float, default=0.2,\
+                    help='dropout rate for edge in GCN, default: 0.2')
 parser.add_argument('--needStance', type=str, default='True',\
                     help='whether use stance feature in rumor detection, default: True')
 # dataset parameters
-parser.add_argument('--dataPath', type=str, default='../dataset/semeval2017-task8/',\
-                    help='path to training dataset, default: ../dataset/semeval2017-task8/')
+parser.add_argument('--dataPath', type=str, default='../dataset/semevalRemake/',\
+                    help='path to training dataset, default: ../dataset/semevalRemake/')
 parser.add_argument('--w2vPath', type=str, default='../dataset/glove/',\
                     help='path to word2vec dataset, default: ../dataset/glove/')
 # train parameters
 parser.add_argument('--optimizer', type=str, default='Adam',\
                     help='set optimizer type in [SGD/Adam], default: Adam')
-parser.add_argument('--lr', type=float, default=3e-4,\
-                    help='set learning rate, default: 3e-4')
+parser.add_argument('--lr', type=float, default=3e-5,\
+                    help='set learning rate, default: 3e-5')
 parser.add_argument('--weightDecay', type=float, default=5e-4,\
                     help='set weight decay for L2 Regularization, default: 5e-4')
 parser.add_argument('--epoch', type=int, default=100,\
@@ -53,8 +55,8 @@ parser.add_argument('--logName', type=str, default='./log/log.txt',\
                     help='log file name, default: log.txt')
 parser.add_argument('--savePath', type=str, default='./model/model.pt',\
                     help='path to save model')
-parser.add_argument('--lossRatio', type=float, default=1.,\
-                    help='ratio for loss-on-rumor:loss-on-stance, default: 1.0')
+parser.add_argument('--acceptThreshold', type=float, default=0.05,\
+                    help='threshold for accept model in multi task, default: 0.05')
 
 def main():
     args = parser.parse_args()
@@ -85,7 +87,7 @@ def main():
     )
     vectorSize = word2vec.vector_size
     word2vec.add_vectors(["<start>", "<end>", "<unk>"] ,np.random.randn(3, vectorSize))
-    with open('../dataset/semeval2017-task8/wordList.json', 'r') as f:
+    with open(args.dataPath + 'wordList.json', 'r') as f:
         content = f.read()
     wordList = ["<unk>", "<start>", "<end>"]
     wordList += (json.loads(content)).keys()
@@ -113,7 +115,7 @@ def main():
     f.close()
     
     # 声明模型、损失函数、优化器
-    model = ABGCN(
+    model = MSABiGCN(
         word2vec = word2vec,
         word2index = word2index,
         s2vDim = args.s2vDim,
@@ -124,6 +126,7 @@ def main():
         w2vAttentionHeads = args.w2vAttHeads,
         s2vAttentionHeads = args.s2vAttHeads,
         dropout = args.dropout,
+        edgeDropRate = args.edgeDropoutRate,
         needStance = True if args.needStance == 'True' else False
     )
     model = model.set_device(device)
@@ -145,9 +148,8 @@ def main():
     start = 1
     # 记录验证集上的最好性能，用于early stop
     earlyStopCounter = 0
-    sumF1 = 0.
-    savedF1Rumor = 0.
-    savedF1Stance = 0.
+    savedRumorF1 = 0.
+    savedStanceF1 = 0.
 
     trainRumorAcc = []
     trainRumorF1 = []
@@ -198,8 +200,7 @@ def main():
 
             optimizer.zero_grad()
             rumorPredict, stancePredict = model.forward(thread)
-            loss = (args.lossRatio / (1 + args.lossRatio)) * loss_func(rumorPredict, rumorTag) \
-                 + (1 / (1 + args.lossRatio)) * loss_func(stancePredict, stanceTag)
+            loss = loss_func(rumorPredict, rumorTag) + loss_func(stancePredict, stanceTag)
             totalLoss += loss
             loss.backward()
             optimizer.step()
@@ -263,8 +264,7 @@ def main():
                 thread['nodeText'] = nodeText
                 
                 rumorPredict, stancePredict = model.forward(thread)
-                loss = (args.lossRatio / (1 + args.lossRatio)) * loss_func(rumorPredict, rumorTag)\
-                     + (1 / (1 + args.lossRatio)) * loss_func(stancePredict, stanceTag)
+                loss = loss_func(rumorPredict, rumorTag) + loss_func(stancePredict, stanceTag)
                 totalLoss += loss
 
                 rumorPredict = softmax(rumorPredict, dim=1)
@@ -281,20 +281,25 @@ def main():
             
 #==============================================
 # 保存验证集marco F1和最大时的模型
-            if macroF1Rumor + macroF1Stance > sumF1:
+            if accept(
+                newRumorF1 = macroF1Rumor,
+                savedRumorF1 = savedRumorF1,
+                newStanceF1 = macroF1Stance,
+                savedStanceF1 = savedStanceF1,
+                threshold = args.acceptThreshold
+            ):
                 model.save(args.savePath)
                 earlyStopCounter = 0
                 saveStatus = {
                     'epoch': epoch,
-                    # 'microF1Rumor': microF1Rumor,
                     'macroF1Rumor': macroF1Rumor,
-                    # 'microF1Stance': microF1Stance,
                     'macroF1Stance': macroF1Stance,
                     'accRumor': accRumor,
                     'accStance': accStance,
                     'loss': (totalLoss / len(testLoader)).item()
                 }
-                sumF1 = max(sumF1, macroF1Rumor + macroF1Stance)
+                savedRumorF1 = macroF1Rumor
+                savedStanceF1 = macroF1Stance
                 f.write('saved model\n')
             else:
                 earlyStopCounter += 1
@@ -347,6 +352,25 @@ def main():
     with open(args.logName[:-4] + '.json', 'w') as f:
         f.write(json.dumps(saveStatus))
 # end main()
+
+# 一个辅助接受保存模型的函数
+def accept(newRumorF1, savedRumorF1, newStanceF1, savedStanceF1, threshold):
+    if newRumorF1 - savedRumorF1 >= 0 and newStanceF1 - savedStanceF1 >= 0:
+        return True
+    elif newRumorF1 - savedRumorF1 < 0 and newStanceF1 - savedStanceF1 < 0:
+        return False
+    elif newRumorF1 - savedRumorF1 < 0:
+        if abs(newRumorF1 - savedRumorF1) <= threshold * savedRumorF1:
+            return True
+        else:
+            return False
+    elif newStanceF1 - savedStanceF1 < 0:
+        if abs(newStanceF1 - savedStanceF1) <= threshold * savedRumorF1:
+            return True
+        else:
+            return False
+    else:
+        return False
 
 if __name__ == '__main__':
     main()

@@ -41,8 +41,8 @@ parser.add_argument('--w2vPath', type=str, default='../dataset/glove/',\
 # train parameters
 parser.add_argument('--optimizer', type=str, default='Adam',\
                     help='set optimizer type in [SGD/Adam], default: Adam')
-parser.add_argument('--lr', type=float, default=3e-4,\
-                    help='set learning rate, default: 3e-4')
+parser.add_argument('--lr', type=float, default=3e-5,\
+                    help='set learning rate, default: 3e-5')
 parser.add_argument('--weightDecay', type=float, default=5e-4,\
                     help='set weight decay for L2 Regularization, default: 5e-4')
 parser.add_argument('--epoch', type=int, default=100,\
