@@ -101,7 +101,7 @@ def main():
     )
     vectorSize = word2vec.vector_size
     word2vec.add_vectors(["<start>", "<end>", "<unk>"] ,np.random.randn(3, vectorSize))
-    with open('../dataset/semeval2017-task8/wordList.json', 'r') as f:
+    with open(args.dataPath + 'wordList.json', 'r') as f:
         content = f.read()
     wordList = ["<unk>", "<start>", "<end>"]
     wordList += (json.loads(content)).keys()
@@ -118,12 +118,12 @@ def main():
     if 'cuda' in args.device:
         device = torch.device((args.device if torch.cuda.is_available() else 'cpu'))
         if torch.cuda.is_available():
-            trainInfo = 'train ABGCN on device:' + args.device + '\n'
+            trainInfo = 'train MSABiGCN on device:' + args.device + '\n'
         else:
-            trainInfo = 'train ABGCN on device: cpu\n'
+            trainInfo = 'train MSABGCN on device: cpu\n'
     else:
         device = torch.device('cpu')
-        trainInfo = 'train ABGCN on device: cpu\n'
+        trainInfo = 'train MSABiGCN on device: cpu\n'
     f.write(trainInfo)
     print(trainInfo)
     f.close()
@@ -159,7 +159,8 @@ def main():
     start = 1
     # 记录验证集上的最好性能，用于early stop
     earlyStopCounter = 0
-    sumF1 = 0.
+    maxF1Train = 0.
+    maxF1Test = 0.
 
     trainRumorAcc = []
     trainRumorF1 = []
@@ -225,6 +226,7 @@ def main():
         ))
         trainRumorAcc.append(acc)
         trainRumorF1.append(macroF1)
+        maxF1Train = max(maxF1Train, macroF1)
     
         # 测试并保存模型
         if epoch % 5 == 0: # 每1个eopch进行一次测试，使用测试集数据
@@ -270,7 +272,7 @@ def main():
             
 #==============================================
 # 保存验证集marco F1和最大时的模型
-            if macroF1Rumor > sumF1:
+            if macroF1Rumor > maxF1Test:
                 model.save(args.savePath)
                 earlyStopCounter = 0
                 saveStatus = {
@@ -279,7 +281,7 @@ def main():
                     'accRumor': accRumor,
                     'loss': (totalLoss / len(testLoader)).item()
                 }
-                sumF1 = max(sumF1, macroF1Rumor)
+                maxF1Test = max(maxF1Test, macroF1Rumor)
                 f.write('saved model\n')
             else:
                 earlyStopCounter += 1
@@ -296,17 +298,15 @@ def main():
             testRumorAcc.append(accRumor)
             testRumorF1.append(macroF1Rumor)
         f.close()
-        if earlyStopCounter >= 20: # 验证集上连续多次测试性能没有提升就早停
+        if earlyStopCounter >= 10: # 验证集上连续多次测试性能没有提升就早停
             print('early stop when F1 on dev set did not increase')
             break
     print(saveStatus)
     with open(args.logName, 'a') as f:
         f.write('\n\nsave model at epoch {:d},\
-                \nmarco F1 rumor: {:f}, acc rumor {:f}\
-                \nmarco F1 stance: {:f}, acc stance: {:f}\n'.format(
+                \nmarco F1 rumor: {:f}, acc rumor {:f}\n'.format(
                     saveStatus['epoch'],
-                    saveStatus['macroF1Rumor'], saveStatus['accRumor'],
-                    saveStatus['macroF1Stance'], saveStatus['accStance']
+                    saveStatus['macroF1Rumor'], saveStatus['accRumor']
                 ))
 
     saveStatus['trainRumorAcc'] = trainRumorAcc
