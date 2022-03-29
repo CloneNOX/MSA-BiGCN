@@ -46,8 +46,6 @@ parser.add_argument('--logName', type=str, default='./log/log.txt',\
                     help='log file name, default: log.txt')
 parser.add_argument('--savePath', type=str, default='./model/model.pt',\
                     help='path to save model')
-parser.add_argument('--acceptThreshold', type=float, default=0.05,\
-                    help='threshold for accept model in multi task, default: 0.05')
 
 def main():
     args = parser.parse_args()
@@ -87,7 +85,7 @@ def main():
             inputDim=inputDim, 
             numGRULayer=args.gruLayer,
             numRumorClass=len(label2IndexRumor),
-            numStanceClass=len(label2IndexStance)
+            numStanceClass=len(label2IndexStance) if label2IndexStance != None else 4
         )
     elif args.modelType == 'mtes':
         model = MTES(
@@ -96,7 +94,7 @@ def main():
             inputDim=inputDim, 
             numGRULayer=args.gruLayer,
             numRumorClass=len(label2IndexRumor),
-            numStanceClass=len(label2IndexStance)
+            numStanceClass=len(label2IndexStance) if label2IndexStance != None else 4
         )
     else:
         return
@@ -120,16 +118,12 @@ def main():
                             weight_decay=args.weightDecay) # 优化器，原文使用AdaGrad
     
     start = 1
-    savedRumorF1 = 0.
-    savedStanceF1 = 0.
     maxMacroF1Rumor = float('-inf')
     minTestLoss = float('inf')
     earlyStopCounter = 0
 
     testRumorAcc = []
     testRumorF1 = []
-    testStanceAcc = []
-    testStanceF1 = []
     testLoss = []
 
     for epoch in range(start, args.epoch + 1):
@@ -137,79 +131,44 @@ def main():
         f.write('[epoch {:d}] '.format(epoch))          
 
         # 训练模型
-        mission = randint(1,2)
-        if mission == 1: # 训练M1
-            f.write('working on task 1(rumor detection)\n')
-            model.train()
-            totalLoss = 0.
-            rumorTrue = []
-            rumorPre = []
+        f.write('working on task 1(rumor detection)\n')
+        model.train()
+        totalLoss = 0.
+        rumorTrue = []
+        rumorPre = []
 
-            for thread in tqdm(iter(trainLoader),
-                               desc="[epoch {:d}, rumor]".format(epoch), 
-                               leave=False, 
-                               ncols=80):
-                #post = tfidf_vec.transform(thread['thread']).toarray()
-                posts = torch.Tensor(tfidf_vec.transform(thread['thread']).toarray()).to(device)
-                rumorTrue += thread['rumorTag'].tolist()
-                rumorTag = thread['rumorTag'].to(device)
-                optimizer.zero_grad()
-                
-                p = model.forwardRumor(posts)
-                loss = loss_func(p, rumorTag)
-                totalLoss += loss
-                loss.backward()
-                optimizer.step()
-                
-                p = softmax(p, 1)
-                rumorPre += p.max(dim=1)[1].tolist()
-
-            macroF1Rumor = f1_score(rumorTrue, rumorPre, labels=range(len(label2IndexRumor)), average='macro')
-            f.write("   rumor detection average loss: {:.4f}, accuracy: {:.4f}, marco F1: {:.4f}\n".format(
-                totalLoss / len(trainSet), 
-                (np.array(rumorTrue) == np.array(rumorPre)).sum() / len(rumorPre), 
-                macroF1Rumor))
-        else: # 训练M2
-            f.write('working on task 2(stance analyze)\n')
-            model.train()
-            totalLoss = 0.
-            stanceTrue = []
-            stancePre = []
-
-            for thread in tqdm(iter(trainLoader),
-                               desc="[epoch {:d}, stance]".format(epoch), 
-                               leave=False, 
-                               ncols=80):
-                posts = torch.Tensor(tfidf_vec.transform(thread['thread']).toarray()).to(device)
-                stanceTrue += thread['stanceTag'].tolist()
-                stanceTag = thread['stanceTag'].to(device)
-                optimizer.zero_grad()
-                
-                p = model.forwardStance(posts)
-                loss = loss_func(p, stanceTag)
-                totalLoss += loss
-                loss.backward()
-                optimizer.step()
-                
-                p = softmax(p, 1)
-                stancePre += p.max(dim=1)[1].tolist()
+        for thread in tqdm(iter(trainLoader),
+                            desc="[epoch {:d}, rumor]".format(epoch), 
+                            leave=False, 
+                            ncols=80):
+            #post = tfidf_vec.transform(thread['thread']).toarray()
+            posts = torch.Tensor(tfidf_vec.transform(thread['thread']).toarray()).to(device)
+            rumorTrue += thread['rumorTag'].tolist()
+            rumorTag = thread['rumorTag'].to(device)
+            optimizer.zero_grad()
             
-            macroF1Stance = f1_score(stanceTrue, stancePre, labels=range(len(label2IndexStance)), average='macro')
-            f.write("   stance classification average loss: {:.4f}, accuracy: {:.4f}, marco F1: {:.4f}\n".format(
-                totalLoss / len(trainSet), 
-                (np.array(stanceTrue) == np.array(stancePre)).sum() / len(stancePre),
-                macroF1Stance))
-        
+            p = model.forwardRumor(posts)
+            loss = loss_func(p, rumorTag)
+            totalLoss += loss
+            loss.backward()
+            optimizer.step()
+            
+            p = softmax(p, 1)
+            rumorPre += p.max(dim=1)[1].tolist()
+
+        macroF1Rumor = f1_score(rumorTrue, rumorPre, labels=range(len(label2IndexRumor)), average='macro')
+        f.write("   rumor detection average loss: {:.4f}, accuracy: {:.4f}, marco F1: {:.4f}\n".format(
+            totalLoss / len(trainSet), 
+            (np.array(rumorTrue) == np.array(rumorPre)).sum() / len(rumorPre), 
+            macroF1Rumor))
+
         # 测试
         if epoch % 5 == 0: # 每5个eopch进行一次测试，使用测试集数据
             f.write('==========\nmodel testing\n')
             model.eval()
             rumorTrue = []
-            stanceTrue = []
             rumorPre = []
-            stancePre = []
             totalLossRumor = 0.
-            totalLossStance = 0.
             
             f.write('testing on both task\n')
             for thread in tqdm(iter(testLoader), 
@@ -219,106 +178,58 @@ def main():
                 posts = torch.Tensor(tfidf_vec.transform(thread['thread']).toarray()).to(device)
                 rumorTrue += thread['rumorTag'].tolist()
                 rumorTag = thread['rumorTag'].to(device)
-                stanceTrue += thread['stanceTag'].tolist()
-                stanceTag = thread['stanceTag'].to(device)
                 
                 pRumor = model.forwardRumor(posts)
-                pStance = model.forwardStance(posts)
                 loss = loss_func(pRumor, rumorTag)
                 totalLossRumor += loss
-                loss = loss_func(pStance, stanceTag)
-                totalLossStance += loss
                 pRumor = softmax(pRumor, 1)
                 rumorPre += pRumor.max(dim=1)[1].tolist()
-                pStance = softmax(pStance, 1)
-                stancePre += pStance.max(dim=1)[1].tolist()
             
             macroF1Rumor = f1_score(rumorTrue, rumorPre, labels=range(len(label2IndexRumor)), average='macro')
-            macroF1Stance = f1_score(stanceTrue, stancePre, labels=range(len(label2IndexStance)), average='macro')
             accuracyRumor = (np.array(rumorTrue) == np.array(rumorPre)).sum() / len(rumorPre)
-            accuracyStance = (np.array(stanceTrue) == np.array(stancePre)).sum() / len(stancePre)
 
 #==============================================
 # 保存rumor detection任务marco F1最大时的模型
-            if accept(
-                newRumorF1 = macroF1Rumor,
-                savedRumorF1 = savedRumorF1,
-                newStanceF1 = macroF1Stance,
-                savedStanceF1 = savedStanceF1,
-                threshold = args.acceptThreshold
-            ):
+            if(macroF1Rumor > maxMacroF1Rumor):
                 model.save(args.savePath)
                 saveStatus = {
                     'epoch': epoch,
                     'macroF1Rumor': macroF1Rumor,
-                    'macroF1Stance': macroF1Stance,
                     'accRumor': accuracyRumor,
-                    'accStance': accuracyStance,
-                    'loss': (totalLossRumor / len(testLoader)).item() + (totalLossStance / len(testLoader)).item()
+                    'loss': (totalLossRumor / len(testLoader)).item()
                 }
-                savedRumorF1 = macroF1Rumor
-                savedStanceF1 = macroF1Stance
+                maxMacroF1Rumor = max(maxMacroF1Rumor, macroF1Rumor)
                 f.write('saved model\n')
-                earlyStopCounter = 0
-#==============================================
             else:
                 earlyStopCounter += 1
+#==============================================
 
             f.write('rumor detection:\n')
             f.write('average loss: {:f}, accuracy: {:f}, macro-f1: {:f}\n'.format(
                 totalLossRumor / len(range(len(trainSet))), accuracyRumor, macroF1Rumor
             ))
-            f.write('stance analyze:\n')
-            f.write('average loss: {:f}, accuracy: {:f}, macro-f1: {:f}\n'.format(
-                totalLossStance / len(trainSet), accuracyStance, macroF1Stance
-            ))
-            f.write('early stop counter: {:d}\n'.format(earlyStopCounter))
             f.write('==========\n')
-            testLoss.append((totalLossRumor / len(testLoader)).item() + (totalLossStance / len(testLoader)).item())
+            testLoss.append((totalLossRumor / len(testLoader)).item())
             testRumorAcc.append(accuracyRumor)
             testRumorF1.append(macroF1Rumor)
-            testStanceAcc.append(accuracyStance)
-            testStanceF1.append(macroF1Stance)
         f.close()
-        if earlyStopCounter == 20:
+        if earlyStopCounter == 10:
             print('early stop when loss on both task did not decrease')
             break
     print(saveStatus)
     with open(args.logName, 'a') as f:
         f.write('\n\nsave model at epoch {:d},\
-                \nmarco F1 rumor: {:f}, acc rumor {:f}\
-                \nmarco F1 stance: {:f}, acc stance: {:f}\n'.format(
+                \nmarco F1 rumor: {:f}, acc rumor {:f}\n'.format(
                     saveStatus['epoch'],
-                    saveStatus['macroF1Rumor'], saveStatus['accRumor'],
-                    saveStatus['macroF1Stance'], saveStatus['accStance']
+                    saveStatus['macroF1Rumor'], saveStatus['accRumor']
                 ))
 
     saveStatus['testRumorAcc'] = testRumorAcc
     saveStatus['testRumorF1'] = testRumorF1
-    saveStatus['testStanceAcc'] = testStanceAcc
-    saveStatus['testStanceF1'] = testStanceF1
     saveStatus['testLoss'] = testLoss
     with open(args.logName[:-4] + '.json', 'w') as f:
         f.write(json.dumps(saveStatus))
 # end main()
-
-def accept(newRumorF1, savedRumorF1, newStanceF1, savedStanceF1, threshold):
-    if newRumorF1 - savedRumorF1 >= 0 and newStanceF1 - savedStanceF1 >= 0:
-        return True
-    elif newRumorF1 - savedRumorF1 < 0 and newStanceF1 - savedStanceF1 < 0:
-        return False
-    elif newRumorF1 - savedRumorF1 < 0 and newStanceF1 - savedStanceF1 >= 0:
-        if abs(newRumorF1 - savedRumorF1) <= threshold * savedRumorF1:
-            return True
-        else:
-            return False
-    elif newRumorF1 - savedRumorF1 >= 0 and newStanceF1 - savedStanceF1 < 0:
-        if abs(newStanceF1 - savedStanceF1) <= threshold * savedRumorF1:
-            return True
-        else:
-            return False
-    else:
-        return False
 
 if __name__ == '__main__':
     main()

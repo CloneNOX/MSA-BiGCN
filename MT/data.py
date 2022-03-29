@@ -48,8 +48,40 @@ class semEval2017Dataset(Dataset):
     def __len__(self):
         return len(self.dataset)
 
+class PHEMEDataset(Dataset):
+    def __init__(self, dataPath: str, type: str) -> None:
+        with open(dataPath + type + 'Set.json', 'r') as f:
+            content = f.read()
+        rawDataset = json.loads(content)
+
+        self.dataset = []
+        for threadId in rawDataset['threadIds']:
+            thread = []
+            structure = rawDataset['structures'][threadId]
+            ids = flattenStructure(structure)
+            time2Id = {}
+            for id in ids:
+                if id in rawDataset['posts']:
+                    time2Id[str(rawDataset['posts'][id]['time'])] = id
+            # post按照时间先后排序
+            time2Id = sorted(time2Id.items(), key=lambda d: d[0])
+            for (time, id) in time2Id:
+                # 需要检查一下数据集中是否有这个id对应的post
+                if id in rawDataset['posts']:
+                    thread.append(rawDataset['posts'][id]['text'])
+            
+            self.dataset.append({
+                'thread': thread,
+                'rumorTag': torch.LongTensor([rawDataset['rumorTags'][threadId]])
+            })
+
+    def __getitem__(self, item):
+        return self.dataset[item]
+
+    def __len__(self):
+        return len(self.dataset)
+
 # 把thread内的nodeFeature转化成Tensor，注意返回的需要是原数据的拷贝，不然会被更改
 def collate(batch):
     thread = deepcopy(batch[0])
-
     return thread

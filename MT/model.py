@@ -51,7 +51,7 @@ class MTUS(nn.Module):
         gruOut, _ = self.shareGRU(embeddings, self.h0) # gruOut(seqLen, batch, numDirection * hiddenDim)
         h1 = gruOut[0].repeat(seqLen, 1, 1) # h1(seqLen, batch, numDirection * hiddenDim)
         p = self.vStance(torch.cat([h1, gruOut], dim=2))
-        return p
+        return p.view(seqLen, -1)
 
     # 更换计算设备
     def set_device(self, device: torch.device) -> torch.nn.Module:
@@ -74,7 +74,7 @@ class MTES(nn.Module):
                  numGRULayer=2, 
                  embeddingDim=100, 
                  hiddenDim=100, 
-                 typeUS2M='cat',
+                 typeUS2M='add',
                  batchSize = 1, 
                  bidirectional = False):
         super().__init__() # 调用nn.Moudle父类的初始化方法
@@ -136,13 +136,12 @@ class MTES(nn.Module):
         # gruShareOut(seqLen, batch, numDirection * hiddenDim)
 
         if self.typeUS2M == 'add':
-        # ======拼接======
+        # ======相加======
             hS2M = self.US2M(gruShareOut) # hS2M(sepLen, batch, embeddingDim)
             gruRumorIn = embeddings + hS2M
         # ================
-
         else:
-        # ======相加======
+        # ======拼接======
             gruRumorIn = torch.cat([embeddings, gruShareOut], dim=2)
         # ================
 
@@ -164,7 +163,6 @@ class MTES(nn.Module):
             hS2M = self.US2M(gruShareOut) # hS2M(sepLen, batch, embeddingDim)
             gruStanceIn = embeddings + hS2M
         # ================
-
         else:
         # ======拼接======
             gruStanceIn = torch.cat([embeddings, gruShareOut], dim=2)
@@ -175,7 +173,7 @@ class MTES(nn.Module):
 
         h1 = gruStanceOut[0].repeat(seqLen, 1, 1) # h1(seqLen, batch, numDirection * hiddenDim)
         ps = self.vStance(torch.cat([h1, gruStanceOut], dim=2))
-        return ps
+        return ps.view(seqLen, -1)
         
     # 更换计算设备
     def set_device(self, device: torch.device) -> torch.nn.Module:
