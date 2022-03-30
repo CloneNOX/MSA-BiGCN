@@ -9,8 +9,8 @@ class Node_tweet(object):
     def __init__(self, idx=None):
         self.children = []
         self.idx = idx
-        self.word = []
-        self.index = []
+        self.word = [] #词频
+        self.index = [] #词序号
         self.parent = None
 
 def str2matrix(Str):  # str = index:wordfreq index:wordfreq

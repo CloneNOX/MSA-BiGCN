@@ -269,6 +269,7 @@ dmypy.json
 # Pyre type checker
 .pyre/
 
+BiGCN/data/
 .vscode/
 reference/
 glove/

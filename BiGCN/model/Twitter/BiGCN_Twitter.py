@@ -94,7 +94,18 @@ class Net(th.nn.Module):
         return x
 
 
-def train_GCN(treeDic, x_test, x_train,TDdroprate,BUdroprate,lr, weight_decay,patience,n_epochs,batchsize,dataname,iter):
+def train_GCN(treeDic, 
+              x_test, 
+              x_train,
+              TDdroprate,
+              BUdroprate,
+              lr,
+              weight_decay,
+              patience,
+              n_epochs,
+              batchsize,
+              dataname,
+              iter):
     model = Net(5000,64,64).to(device)
     BU_params=list(map(id,model.BUrumorGCN.conv1.parameters()))
     BU_params += list(map(id, model.BUrumorGCN.conv2.parameters()))

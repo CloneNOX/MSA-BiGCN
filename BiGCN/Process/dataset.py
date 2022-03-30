@@ -52,8 +52,8 @@ class BiGraphDataset(Dataset):
         return len(self.fold_x)
 
     def __getitem__(self, index):
-        id =self.fold_x[index]
-        data=np.load(os.path.join(self.data_path, id + ".npz"), allow_pickle=True)
+        id = self.fold_x[index]
+        data = np.load(os.path.join(self.data_path, id + ".npz"), allow_pickle=True)
         edgeindex = data['edgeindex']
         if self.tddroprate > 0:
             row = list(edgeindex[0])
