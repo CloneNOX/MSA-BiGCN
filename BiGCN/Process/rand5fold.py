@@ -50,6 +50,7 @@ def load5foldData(obj):
         fold0_x_train.extend(F[leng2:])
         fold0_x_train.extend(T[leng3:])
         fold0_x_train.extend(U[leng4:])
+
         fold1_x_train.extend(NR[0:leng1])
         fold1_x_train.extend(NR[leng1 * 2:])
         fold1_x_train.extend(F[0:leng2])
@@ -62,6 +63,7 @@ def load5foldData(obj):
         fold1_x_test.extend(F[leng2:leng2*2])
         fold1_x_test.extend(T[leng3:leng3*2])
         fold1_x_test.extend(U[leng4:leng4*2])
+
         fold2_x_train.extend(NR[0:leng1*2])
         fold2_x_train.extend(NR[leng1*3:])
         fold2_x_train.extend(F[0:leng2*2])
@@ -74,6 +76,7 @@ def load5foldData(obj):
         fold2_x_test.extend(F[leng2*2:leng2*3])
         fold2_x_test.extend(T[leng3*2:leng3*3])
         fold2_x_test.extend(U[leng4*2:leng4*3])
+
         fold3_x_train.extend(NR[0:leng1*3])
         fold3_x_train.extend(NR[leng1*4:])
         fold3_x_train.extend(F[0:leng2*3])
@@ -86,6 +89,7 @@ def load5foldData(obj):
         fold3_x_test.extend(F[leng2*3:leng2*4])
         fold3_x_test.extend(T[leng3*3:leng3*4])
         fold3_x_test.extend(U[leng4*3:leng4*4])
+        
         fold4_x_train.extend(NR[0:leng1*4])
         fold4_x_train.extend(NR[leng1*5:])
         fold4_x_train.extend(F[0:leng2*4])
@@ -152,6 +156,83 @@ def load5foldData(obj):
         fold4_x_train.extend(T[leng2 * 5:])
         fold4_x_test.extend(F[leng1 * 4:leng1 * 5])
         fold4_x_test.extend(T[leng2 * 4:leng2 * 5])
+    
+    if obj == "SemEval":
+        labelPath = os.path.join(cwd,"data/SemEval/semeval_id_label.txt")
+        print("loading SemEval label:")
+        T, F, U = [], [], []
+        l1 = l2 = l3 = 0
+        labelDic = {}
+        for line in open(labelPath):
+            line = line.rstrip()
+            eid,label = line.split(' ')[0], line.split(' ')[1]
+            labelDic[eid] = int(label)
+            if labelDic[eid]==0:
+                T.append(eid)
+                l1 += 1
+            if labelDic[eid]==1:
+                F.append(eid)
+                l2 += 1
+            if labelDic[eid]==2:
+                U.append(eid)
+                l3 += 1
+        print(len(labelDic))
+        print(l1, l2, l3)
+        random.shuffle(T)
+        random.shuffle(F)
+        random.shuffle(U)
+
+        fold0_x_test, fold1_x_test, fold2_x_test, fold3_x_test, fold4_x_test = [], [], [], [], []
+        fold0_x_train, fold1_x_train, fold2_x_train, fold3_x_train, fold4_x_train = [], [], [], [], []
+        leng1 = int(l1 * 0.2)
+        leng2 = int(l2 * 0.2)
+        leng3 = int(l3 * 0.2)
+        fold0_x_test.extend(T[0:leng1])
+        fold0_x_test.extend(F[0:leng2])
+        fold0_x_test.extend(U[0:leng3])
+        fold0_x_train.extend(T[leng1:])
+        fold0_x_train.extend(F[leng2:])
+        fold0_x_train.extend(U[leng3:])
+
+        fold1_x_train.extend(T[0:leng1])
+        fold1_x_train.extend(T[leng1 * 2:])
+        fold1_x_train.extend(F[0:leng2])
+        fold1_x_train.extend(F[leng2 * 2:])
+        fold1_x_train.extend(U[0:leng3])
+        fold1_x_train.extend(U[leng3 * 2:])
+        fold1_x_test.extend(T[leng1:leng1 * 2])
+        fold1_x_test.extend(F[leng2:leng2 * 2])
+        fold1_x_test.extend(U[leng3:leng3 * 2])
+
+        fold2_x_train.extend(T[0:leng1 * 2])
+        fold2_x_train.extend(T[leng1 * 3:])
+        fold2_x_train.extend(F[0:leng2 * 2])
+        fold2_x_train.extend(F[leng2 * 3:])
+        fold2_x_train.extend(U[0:leng3 * 2])
+        fold2_x_train.extend(U[leng3 * 3:])
+        fold2_x_test.extend(T[leng1 * 2:leng1 * 3])
+        fold2_x_test.extend(F[leng2 * 2:leng2 * 3])
+        fold2_x_test.extend(U[leng3 * 2:leng3 * 3])
+
+        fold3_x_train.extend(T[0:leng1 * 3])
+        fold3_x_train.extend(T[leng1 * 4:])
+        fold3_x_train.extend(F[0:leng2 * 3])
+        fold3_x_train.extend(F[leng2 * 4:])
+        fold3_x_train.extend(U[0:leng3 * 3])
+        fold3_x_train.extend(U[leng3 * 4:])
+        fold3_x_test.extend(T[leng1 * 3:leng1 * 4])
+        fold3_x_test.extend(U[leng2 * 3:leng2 * 4])
+        fold3_x_test.extend(U[leng3 * 3:leng3 * 4])
+
+        fold4_x_train.extend(T[0:leng1 * 4])
+        fold4_x_train.extend(T[leng1 * 5:])
+        fold4_x_train.extend(F[0:leng2 * 4])
+        fold4_x_train.extend(F[leng2 * 5:])
+        fold4_x_train.extend(U[0:leng3 * 4])
+        fold4_x_train.extend(U[leng3 * 5:])
+        fold4_x_test.extend(F[leng1 * 4:leng1 * 5])
+        fold4_x_test.extend(T[leng2 * 4:leng2 * 5])
+        fold4_x_test.extend(U[leng3 * 4:leng3 * 5])
 
     fold0_test = list(fold0_x_test)
     shuffle(fold0_test)

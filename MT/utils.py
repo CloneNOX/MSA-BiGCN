@@ -36,19 +36,7 @@ def getTfidfAndLabel(dataSetPath:str, dim=5000):
             cropus.append(text)
     tfidf_vec = TfidfVectorizer(max_features = dim)
     tfidf_vec.fit(cropus)
-    # counter = 0
-    # for i in range(len(threads)):
-    #     tfidf = []
-    #     for _ in threads[i]:
-    #         tfidf.append(tfidf_matrix[counter])
-    #         counter += 1
-    #     threads[i] = torch.Tensor(np.array(tfidf))
 
-    # label2IndexRumor = trainSet['label2IndexRumor']
-    # label2IndexStance = trainSet['label2IndexStance']
-    # trainSet = []
-    # for i in range(len(threads)):
-    #     trainSet.append((threads[i], rumorTags[i], stanceTags[i]))
 
     if 'PHEME' in dataSetPath:
         label2IndexRumor = trainSet['label2Index'] if 'label2Index' in trainSet else None

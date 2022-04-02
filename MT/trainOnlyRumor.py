@@ -200,6 +200,7 @@ def main():
                 }
                 maxMacroF1Rumor = max(maxMacroF1Rumor, macroF1Rumor)
                 f.write('saved model\n')
+                earlyStopCounter = 0
             else:
                 earlyStopCounter += 1
 #==============================================
@@ -208,12 +209,13 @@ def main():
             f.write('average loss: {:f}, accuracy: {:f}, macro-f1: {:f}\n'.format(
                 totalLossRumor / len(range(len(trainSet))), accuracyRumor, macroF1Rumor
             ))
+            f.write('early stop counter: {:d}'.format(earlyStopCounter))
             f.write('==========\n')
             testLoss.append((totalLossRumor / len(testLoader)).item())
             testRumorAcc.append(accuracyRumor)
             testRumorF1.append(macroF1Rumor)
         f.close()
-        if earlyStopCounter == 10:
+        if earlyStopCounter >= 10:
             print('early stop when loss on both task did not decrease')
             break
     print(saveStatus)

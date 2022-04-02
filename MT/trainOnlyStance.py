@@ -200,6 +200,7 @@ def main():
                 }
                 maxMacroF1Stance = max(maxMacroF1Stance, macroF1Stance)
                 f.write('saved model\n')
+                earlyStopCounter = 0
             else:
                 earlyStopCounter += 1
 #==============================================

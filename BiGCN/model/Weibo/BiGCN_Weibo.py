@@ -208,7 +208,7 @@ for iter in range(iterations):
     fold1_x_test, fold1_x_train, \
     fold2_x_test, fold2_x_train,  \
     fold3_x_test, fold3_x_train,  \
-    fold4_x_test, fold4_x_train = load5foldData(datasetname)
+    fold4_x_test, fold4_x_train = load5foldData(datasetname) # 交叉验证数据集
     treeDic=loadTree(datasetname)
     train_losses, val_losses, train_accs, val_accs, accs_0, acc1_0, pre1_0, rec1_0, F1_0, acc2_0, pre2_0, rec2_0, F2_0 = train_GCN(treeDic,
                                                                                                fold0_x_test,
