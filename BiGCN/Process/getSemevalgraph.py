@@ -90,7 +90,7 @@ def main():
     labelPath = os.path.join(cwd, "data/SemEval/semeval_id_label.txt")
     print("loading Semeval label:")
     event,y= [],[]
-    l1 = l2 = 0
+    l1 = l2 = l3 = 0
     labelDic = {}
     for line in open(labelPath):
         line = line.rstrip()
@@ -102,9 +102,11 @@ def main():
             l1 += 1
         if labelDic[eid]==1:
             l2 += 1
+        if labelDic[eid]==2:
+            l3 += 1
 
     print(len(labelDic),len(event),len(y))
-    print(l1, l2)
+    print(l1, l2, l3)
 
     def loadEid(event,id,y):
         if event is None:

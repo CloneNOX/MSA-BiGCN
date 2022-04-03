@@ -41,6 +41,18 @@ def loadTree(dataname):
                 treeDic[eid] = {}
             treeDic[eid][indexC] = {'parent': indexP, 'vec': Vec}
         print('tree no:', len(treeDic))
+
+    if dataname == 'PHEME':
+        treePath = os.path.join(cwd,'data/PHEME/PHEMEtree.txt')
+        print("reading PHEME tree")
+        treeDic = {}
+        for line in open(treePath):
+            line = line.rstrip()
+            eid, indexP, indexC,Vec = line.split('\t')[0], line.split('\t')[1], int(line.split('\t')[2]),line.split('\t')[3]
+            if not treeDic.__contains__(eid):
+                treeDic[eid] = {}
+            treeDic[eid][indexC] = {'parent': indexP, 'vec': Vec}
+        print('tree no:', len(treeDic))
     return treeDic
 
 ################################# load data ###################################
