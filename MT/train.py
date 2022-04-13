@@ -126,6 +126,12 @@ def main():
     minTestLoss = float('inf')
     earlyStopCounter = 0
 
+    trainRumorAcc = []
+    trainRumorF1 = []
+    trainStanceAcc = []
+    trainStanceF1 = []
+    trainLoss = []
+
     testRumorAcc = []
     testRumorF1 = []
     testStanceAcc = []

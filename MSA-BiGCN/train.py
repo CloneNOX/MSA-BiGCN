@@ -359,12 +359,12 @@ def accept(newRumorF1, savedRumorF1, newStanceF1, savedStanceF1, threshold):
         return True
     elif newRumorF1 - savedRumorF1 < 0 and newStanceF1 - savedStanceF1 < 0:
         return False
-    elif newRumorF1 - savedRumorF1 < 0 and newStanceF1 - savedStanceF1 >= 0:
+    elif newRumorF1 - savedRumorF1 < 0 and newStanceF1 - savedStanceF1 > 0:
         if abs(newRumorF1 - savedRumorF1) <= threshold * savedRumorF1:
             return True
         else:
             return False
-    elif newRumorF1 - savedRumorF1 >= 0 and newStanceF1 - savedStanceF1 < 0:
+    elif newRumorF1 - savedRumorF1 > 0 and newStanceF1 - savedStanceF1 < 0:
         if abs(newStanceF1 - savedStanceF1) <= threshold * savedRumorF1:
             return True
         else:
