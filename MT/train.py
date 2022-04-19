@@ -126,8 +126,10 @@ def main():
     minTestLoss = float('inf')
     earlyStopCounter = 0
 
+    trainRumorEpoch = []
     trainRumorAcc = []
     trainRumorF1 = []
+    trainStanceEpoch = []
     trainStanceAcc = []
     trainStanceF1 = []
     trainLoss = []
@@ -175,6 +177,9 @@ def main():
                 totalLoss / len(trainSet), 
                 (np.array(rumorTrue) == np.array(rumorPre)).sum() / len(rumorPre), 
                 macroF1Rumor))
+            trainRumorEpoch.append(epoch)
+            trainRumorF1.append(macroF1Rumor)
+            trainRumorAcc.append((np.array(rumorTrue) == np.array(rumorPre)).sum() / len(rumorPre))
         else: # 训练M2
             f.write('working on task 2(stance analyze)\n')
             model.train()
@@ -205,6 +210,9 @@ def main():
                 totalLoss / len(trainSet), 
                 (np.array(stanceTrue) == np.array(stancePre)).sum() / len(stancePre),
                 macroF1Stance))
+            trainStanceEpoch.append(epoch)
+            trainStanceF1.append(macroF1Stance)
+            trainStanceAcc.append((np.array(stanceTrue) == np.array(stancePre)).sum() / len(stancePre))
         
         # 测试
         if epoch % 5 == 0: # 每5个eopch进行一次测试，使用测试集数据
@@ -299,6 +307,12 @@ def main():
                     saveStatus['macroF1Stance'], saveStatus['accStance']
                 ))
 
+    saveStatus['trainRumorEpoch'] = trainRumorEpoch
+    saveStatus['trainRumorAcc'] = trainRumorAcc
+    saveStatus[' trainRumorF1'] = trainRumorF1
+    saveStatus['trainStanceEpoch'] = trainStanceEpoch
+    saveStatus['trainStanceAcc'] = trainStanceAcc
+    saveStatus['trainStanceF1'] = trainStanceF1
     saveStatus['testRumorAcc'] = testRumorAcc
     saveStatus['testRumorF1'] = testRumorF1
     saveStatus['testStanceAcc'] = testStanceAcc
