@@ -272,7 +272,6 @@ dmypy.json
 BiGCN/data/
 .vscode/
 reference/
-glove/
 dataset/PHEME/all-rnr-annotated-threads/
 oldPHEME/
 nohupout/
