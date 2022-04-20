@@ -52,9 +52,9 @@ parser.add_argument('--epoch', type=int, default=100,\
 parser.add_argument('--device', type=str, default='cuda',\
                     help='select device(cuda/cpu), default: cuda')
 parser.add_argument('--logName', type=str, default='./log/log.txt',\
-                    help='log file name, default: log.txt')
+                    help='log file name, default: ./log/log.txt')
 parser.add_argument('--savePath', type=str, default='./model/model.pt',\
-                    help='path to save model')
+                    help='path to save model, default: ./model/model.txt')
 parser.add_argument('--acceptThreshold', type=float, default=0.05,\
                     help='threshold for accept model in multi task, default: 0.05')
 

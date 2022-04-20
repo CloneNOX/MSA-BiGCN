@@ -17,18 +17,18 @@ import sys
 parser = argparse.ArgumentParser(description="Training script for ABGCN")
 
 # model hyperparameters
-parser.add_argument('--w2vDim', type=int, default=100,\
-                    help='dimention of word2vec, default: 100')
-parser.add_argument('--s2vDim' ,type=int, default=128,\
+parser.add_argument('--w2vDim', type=int, default=50,\
+                    help='dimention of word2vec, default: 50')
+parser.add_argument('--s2vDim' ,type=int, default=64,\
                     help='dimention of sentence2vec(get from lstm/attention)')
 parser.add_argument('--w2vAttHeads', type=int, default=1,\
                     help='heads of multi-heads self-attention in word2vec layer, default: 1')
 parser.add_argument('--s2vAttHeads', type=int, default=1,\
                     help='heads of multi-heads self-attention in sentence2vec layer, default: 1')
 parser.add_argument('--gcnHiddenDim', type=int, default=256,\
-                    help='dimention of GCN hidden layer, default: 128')
+                    help='dimention of GCN hidden layer, default: 256')
 parser.add_argument('--rumorFeatureDim', type=int, default=256,\
-                    help='dimention of GCN output, default: 128')
+                    help='dimention of GCN output, default: 256')
 parser.add_argument('--dropout', type=float, default=0.0,\
                     help='dropout rate for model, default: 0.0')
 parser.add_argument('--needStance', type=str, default='True',\
@@ -50,9 +50,9 @@ parser.add_argument('--epoch', type=int, default=100,\
 parser.add_argument('--device', type=str, default='cuda',\
                     help='select device(cuda/cpu), default: cuda')
 parser.add_argument('--logName', type=str, default='./log/log.txt',\
-                    help='log file name, default: log.txt')
+                    help='log file name, default: ./log/log.txt')
 parser.add_argument('--savePath', type=str, default='./model/model.pt',\
-                    help='path to save model')
+                    help='path to save model, default: ./model/model.txt')
 parser.add_argument('--lossRatio', type=float, default=1.,\
                     help='ratio for loss-on-rumor:loss-on-stance, default: 1.0')
 
