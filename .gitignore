@@ -295,6 +295,5 @@ DualHierarchicalTransformer/output_v7/
 *.txt
 *.tar.bz2
 *.doc
-*.md
 *.out
 *.m
