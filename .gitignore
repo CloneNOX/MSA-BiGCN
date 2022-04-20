@@ -273,7 +273,7 @@ BiGCN/data/
 .vscode/
 reference/
 glove/
-PHEME/
+dataset/PHEME/all-rnr-annotated-threads/
 oldPHEME/
 nohupout/
 学位论文相关资料/
