@@ -32,7 +32,7 @@ torch_geometric 2.0.3
 
 ### dataset
 
-dataset文件中包含了[SemEval]([Data and Tools < SemEval-2017 Task 8 (qcri.org)](https://alt.qcri.org/semeval2017/task8/index.php?id=data-and-tools))/[PHEME]([PHEME dataset for Rumour Detection and Veracity Classification (figshare.com)](https://figshare.com/articles/dataset/PHEME_dataset_for_Rumour_Detection_and_Veracity_Classification/6392078))处理后的数据集，以Json文件形式存储。若希望重新生成数据集，需要将数据集源文件下载到对应目录下，解压，并运行`getDataset.ipynb`中的所有单元格。（SemEvalRemake数据集是SemEval数据集的重新划分，在本文实验中并没有使用到）
+dataset文件中包含了[SemEval](https://alt.qcri.org/semeval2017/task8/index.php?id=data-and-tools)/[PHEME](https://figshare.com/articles/dataset/PHEME_dataset_for_Rumour_Detection_and_Veracity_Classification/6392078)处理后的数据集，以Json文件形式存储。若希望重新生成数据集，需要将数据集源文件下载到对应目录下，解压，并运行`getDataset.ipynb`中的所有单元格。（SemEvalRemake数据集是SemEval数据集的重新划分，在本文实验中并没有使用到）
 
 **注意：**本数据集中不包含glove预训练词向量文件。正确运行模型代码需要确保`dataset/glove/`目录存在。并且在目录中下载**glove.twitter.27B**[源文件](https://nlp.stanford.edu/projects/glove/)，并运行`fix.py`。
 
