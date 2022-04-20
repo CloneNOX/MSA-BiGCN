@@ -281,7 +281,11 @@ semeval2017-task8-dataset/
 semeval2017-task8-test-data/
 log/
 model/
-nohup.out
+DualHierarchicalTransformer/output_release/
+DualHierarchicalTransformer/output_release_backup/
+DualHierarchicalTransformer/running_log_files/
+DualHierarchicalTransformer/output_v7/
+
 *.png
 *.pdf
 *.zip
