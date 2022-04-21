@@ -11,7 +11,9 @@ from tqdm import tqdm
 from Process.rand5fold import *
 from tools.evaluate import *
 from torch_geometric.nn import GCNConv
+from time import process_time
 import copy
+import json
 
 class TDrumorGCN(th.nn.Module):
     def __init__(self,in_feats,hid_feats,out_feats):
@@ -88,7 +90,7 @@ class Net(th.nn.Module):
         x = F.log_softmax(x, dim=1)
         return x
 
-def train_GCN(treeDic, x_test, x_train,TDdroprate,BUdroprate,lr, weight_decay,patience,n_epochs,batchsize,dataname,iter):
+def train_GCN(treeDic, x_test, x_train,TDdroprate,BUdroprate,lr, weight_decay,patience,n_epochs,batchsize,dataname,iter,epochTime):
     log = open('./SemEvalLog.txt', 'a')
 
     model = Net(5000,64,64).to(device)
@@ -100,7 +102,6 @@ def train_GCN(treeDic, x_test, x_train,TDdroprate,BUdroprate,lr, weight_decay,pa
         {'params':model.BUrumorGCN.conv1.parameters(),'lr':lr/5},
         {'params': model.BUrumorGCN.conv2.parameters(), 'lr': lr/5}
     ], lr=lr, weight_decay=weight_decay)
-    model.train()
     train_losses,val_losses,train_accs,val_accs = [],[],[],[]
     early_stopping = EarlyStopping3Class(patience=patience, verbose=True)
     for epoch in range(n_epochs):
@@ -111,7 +112,9 @@ def train_GCN(treeDic, x_test, x_train,TDdroprate,BUdroprate,lr, weight_decay,pa
                                  shuffle=True, num_workers=10)
         avg_loss,avg_acc = [],[]
         batch_idx = 0
+        model.train()
         tqdm_train_loader = tqdm(train_loader)
+        start = process_time()
         for Batch_data in tqdm_train_loader:
             Batch_data.to(device)
             out_labels = model(Batch_data)
@@ -134,6 +137,8 @@ def train_GCN(treeDic, x_test, x_train,TDdroprate,BUdroprate,lr, weight_decay,pa
             batch_idx = batch_idx + 1
         train_losses.append(np.mean(avg_loss))
         train_accs.append(np.mean(avg_acc))
+        end = process_time()
+        epochTime.append(end - start)
 
         temp_val_losses = []
         temp_val_accs = []
@@ -205,6 +210,7 @@ iterations=int(sys.argv[1])
 model="BiGCN"
 device = th.device('cuda:0' if th.cuda.is_available() else 'cpu')
 test_accs,TR_F1,FR_F1,UR_F1  = [],[],[],[]
+epochTime = []
 for iter in range(iterations):
     fold0_x_test, fold0_x_train,\
     fold1_x_test, fold1_x_train, \
@@ -221,7 +227,8 @@ for iter in range(iterations):
                                                                                         n_epochs,
                                                                                         batchsize,
                                                                                         datasetname,
-                                                                                        iter)
+                                                                                        iter,
+                                                                                        epochTime)
     train_losses, val_losses, train_accs, val_accs, accs_1, F1_1, F2_1, F3_1 = train_GCN(treeDic,
                                                                                         fold1_x_test,
                                                                                         fold1_x_train,
@@ -231,7 +238,8 @@ for iter in range(iterations):
                                                                                         n_epochs,
                                                                                         batchsize,
                                                                                         datasetname,
-                                                                                        iter)
+                                                                                        iter,
+                                                                                        epochTime)
     train_losses, val_losses, train_accs, val_accs, accs_2, F1_2, F2_2, F3_2 = train_GCN(treeDic,
                                                                                         fold2_x_test,
                                                                                         fold2_x_train,
@@ -241,7 +249,8 @@ for iter in range(iterations):
                                                                                         n_epochs,
                                                                                         batchsize,
                                                                                         datasetname,
-                                                                                        iter)
+                                                                                        iter,
+                                                                                        epochTime)
     train_losses, val_losses, train_accs, val_accs, accs_3, F1_3, F2_3, F3_3 = train_GCN(treeDic,
                                                                                         fold3_x_test,
                                                                                         fold3_x_train,
@@ -251,7 +260,8 @@ for iter in range(iterations):
                                                                                         n_epochs,
                                                                                         batchsize,
                                                                                         datasetname,
-                                                                                        iter)
+                                                                                        iter,
+                                                                                        epochTime)
     train_losses, val_losses, train_accs, val_accs, accs_4, F1_4, F2_4, F3_4 = train_GCN(treeDic,
                                                                                         fold4_x_test,
                                                                                         fold4_x_train,
@@ -261,15 +271,21 @@ for iter in range(iterations):
                                                                                         n_epochs,
                                                                                         batchsize,
                                                                                         datasetname,
-                                                                                        iter)
+                                                                                        iter,
+                                                                                        epochTime)
     test_accs.append((accs_0+accs_1+accs_2+accs_3+accs_4)/5)
     FR_F1.append((F2_0 + F2_1 + F2_2 + F2_3 + F2_4) / 5)
     TR_F1.append((F1_0 + F1_1 + F1_2 + F1_3 + F1_4) / 5)
     UR_F1.append((F3_0 + F3_1 + F3_2 + F3_3 + F3_4) / 5)
 print("Total_Test_Accuracy: {:.4f}|FR F1: {:.4f}|TR F1: {:.4f}|UR F1: {:.4f}".format(
     sum(test_accs) / iterations, sum(FR_F1) /iterations, sum(TR_F1) / iterations, sum(UR_F1) / iterations))
-    
-log = open('./SemEvalLog.txt', 'w')
+
+saveStatus = {}
+saveStatus['runTime'] = epochTime
+with open('SemevalTrainTime.json', 'w') as f:
+    f.write(json.dumps(saveStatus))
+
+log = open('./SemEvalLog.txt', 'a')
 print("Total_Test_Accuracy: {:.4f}|FR F1: {:.4f}|TR F1: {:.4f}|UR F1: {:.4f}".format(
     sum(test_accs) / iterations, sum(FR_F1) /iterations, sum(TR_F1) / iterations, sum(UR_F1) / iterations),
     file=log
