@@ -12,6 +12,7 @@ from model import *
 from utils import *
 from random import randint, shuffle
 from tqdm import tqdm
+from time import process_time
 
 parser = argparse.ArgumentParser(description="Training script for MTUS/MTES")
 
@@ -140,11 +141,14 @@ def main():
     testStanceF1 = []
     testLoss = []
 
+    epochTime = []
+
     for epoch in range(start, args.epoch + 1):
         f = open(args.logName, 'a')
         f.write('[epoch {:d}] '.format(epoch))          
 
         # 训练模型
+        startTime = process_time()
         mission = randint(1,2)
         if mission == 1: # 训练M1
             f.write('working on task 1(rumor detection)\n')
@@ -213,7 +217,9 @@ def main():
             trainStanceEpoch.append(epoch)
             trainStanceF1.append(macroF1Stance)
             trainStanceAcc.append((np.array(stanceTrue) == np.array(stancePre)).sum() / len(stancePre))
-        
+        endTime = process_time()
+        epochTime.append(endTime - startTime)
+
         # 测试
         if epoch % 5 == 0: # 每5个eopch进行一次测试，使用测试集数据
             f.write('==========\nmodel testing\n')
@@ -318,6 +324,7 @@ def main():
     saveStatus['testStanceAcc'] = testStanceAcc
     saveStatus['testStanceF1'] = testStanceF1
     saveStatus['testLoss'] = testLoss
+    saveStatus['runTime'] = epochTime
     with open(args.logName[:-4] + '.json', 'w') as f:
         f.write(json.dumps(saveStatus))
 # end main()

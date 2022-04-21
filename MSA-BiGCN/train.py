@@ -12,6 +12,7 @@ from sklearn.metrics import f1_score
 from utils import *
 from tqdm import tqdm
 from copy import copy
+from time import process_time
 import sys
 
 parser = argparse.ArgumentParser(description="Training script for ABGCN")
@@ -163,6 +164,8 @@ def main():
     testStanceF1 = []
     testLoss = []
 
+    epochTime = []
+
     for epoch in range(start, args.epoch + 1):
         f = open(args.logName, 'a')
         f.write('[epoch: {:d}] '.format(epoch))
@@ -175,6 +178,7 @@ def main():
         totalLoss = 0.
         
         model.train()
+        startTime = process_time()
         for thread in tqdm(
             iter(loader), 
             desc="[epoch: {:d}] ".format(epoch), 
@@ -229,6 +233,8 @@ def main():
         ))
         trainStanceAcc.append(acc)
         trainStanceF1.append(macroF1)
+        endTime = process_time()
+        epochTime.append(endTime - startTime)
     
         # 测试并保存模型
         if epoch % 5 == 0: # 每1个eopch进行一次测试，使用测试集数据
@@ -349,6 +355,7 @@ def main():
     saveStatus['testStanceAcc'] = testStanceAcc
     saveStatus['testStanceF1'] = testStanceF1
     saveStatus['testLoss'] = testLoss
+    saveStatus['runTime'] = epochTime
     with open(args.logName[:-4] + '.json', 'w') as f:
         f.write(json.dumps(saveStatus))
 # end main()

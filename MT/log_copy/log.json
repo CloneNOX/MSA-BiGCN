@@ -1,1 +1,0 @@
-{"epoch": 5, "macroF1Rumor": 0.45532245532245536, "accRumor": 0.5, "loss": 2.0254626274108887, "testRumorAcc": [0.5], "testRumorF1": [0.45532245532245536], "testLoss": [2.0254626274108887]}
