@@ -39,7 +39,8 @@ from my_bert.optimization import BertAdam
 from my_bert.file_utils import PYTORCH_PRETRAINED_BERT_CACHE
 
 from sklearn.metrics import precision_recall_fscore_support
-
+from time import process_time
+import json
 
 logging.basicConfig(format = '%(asctime)s - %(levelname)s - %(name)s -   %(message)s',
                     datefmt = '%m/%d/%Y %H:%M:%S',
@@ -702,6 +703,8 @@ def main():
 
     args = parser.parse_args()
 
+    epochTime = []
+
     if args.bertlayer:
         print("add another bert layer")
     else:
@@ -1110,6 +1113,8 @@ def main():
             stance_tr_loss = 0
             nb_tr_examples, nb_tr_steps = 0, 0
             stance_nb_tr_examples, stance_nb_tr_steps = 0, 0
+
+            start = process_time()
             for step, batch in enumerate(tqdm(train_dataloader, desc="Iteration")):
                 batch = tuple(t.to(device) for t in batch)
                 input_ids1, input_mask1, segment_ids1, input_ids2, input_mask2, segment_ids2, \
@@ -1173,6 +1178,8 @@ def main():
                         param_group['lr'] = stance_lr_this_step
                     stance_optimizer.step()
                     stance_optimizer.zero_grad()
+            end = process_time()
+            epochTime.append(end - start)
 
             logger.info("\n************************************************** Running evaluation on Dev Set****************************************")
             logger.info("  Num examples = %d", len(eval_examples))
@@ -1667,6 +1674,10 @@ def main():
             for key in sorted(result.keys()):
                 logger.info("  %s = %s", key, str(result[key]))
                 writer.write("%s = %s\n" % (key, str(result[key])))
+    saveStatus = {}
+    saveStatus['runTime'] = epochTime
+    with open('SemeEvalMultiTaskTrainTime.json', 'w') as f:
+        f.write(json.dumps(saveStatus))
 
 if __name__ == "__main__":
     main()

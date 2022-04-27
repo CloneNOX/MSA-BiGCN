@@ -39,6 +39,8 @@ from my_bert.optimization import BertAdam
 from my_bert.file_utils import PYTORCH_PRETRAINED_BERT_CACHE
 
 from sklearn.metrics import precision_recall_fscore_support
+from time import process_time
+import json
 
 
 logging.basicConfig(format = '%(asctime)s - %(levelname)s - %(name)s -   %(message)s',
@@ -112,7 +114,6 @@ class InputStanceFeatures(object):
         self.stance_position = stance_position
         self.label_mask = label_mask
 
-
 class DataProcessor(object):
     """Base class for data converters for sequence classification data sets."""
 
@@ -179,7 +180,6 @@ class RumorProcessor(DataProcessor):
                 InputExample(guid=guid, text_a=text_a, text_b=text_b, label=label))
         return examples
 
-
 class StanceProcessor(DataProcessor):
     """Processor for the Stance Prediction data set (GLUE version)."""
 
@@ -216,7 +216,6 @@ class StanceProcessor(DataProcessor):
             examples.append(
                 InputExample(guid=guid, text_a=text_a, text_b=text_b, label=label))
         return examples
-
 
 def convert_examples_to_features(examples, label_list, max_seq_length, tokenizer, max_tweet_num, max_tweet_len):
     """Loads a data file into a list of `InputBatch`s."""
@@ -311,7 +310,6 @@ def convert_examples_to_features(examples, label_list, max_seq_length, tokenizer
                           input_mask=input_mask, label_id=label_id, stance_position=stance_position))
     return features
 
-
 def bucket_rumor_conversion(tweets_tokens, tokenizer, max_tweet_num, max_tweet_len, max_seq_length):
     ntokens = []
     input_tokens = []
@@ -367,7 +365,6 @@ def bucket_rumor_conversion(tweets_tokens, tokenizer, max_tweet_num, max_tweet_l
     assert len(segment_ids) == max_seq_length
 
     return input_tokens, input_ids, input_mask, segment_ids, stance_position
-
 
 def bucket_conversion(tweets_tokens, labels, label_map, tokenizer, max_tweet_num, max_tweet_len, max_seq_length):
     ntokens = []
@@ -432,7 +429,6 @@ def bucket_conversion(tweets_tokens, labels, label_map, tokenizer, max_tweet_num
     assert len(segment_ids) == max_seq_length
 
     return input_tokens, input_ids, input_mask, segment_ids, label_ids, stance_position, label_mask
-
 
 def convert_stance_examples_to_features(examples, label_list, max_seq_length, tokenizer, max_tweet_num, max_tweet_len):
     """Loads a data file into a list of `InputBatch`s."""
@@ -549,7 +545,6 @@ def convert_stance_examples_to_features(examples, label_list, max_seq_length, to
                                 input_ids4=input_ids4, input_mask4=input_mask4, segment_ids4=segment_ids4,
                           input_mask=input_mask, label_id=label_ids, stance_position=stance_position, label_mask=label_mask))
     return features
-
 
 def _truncate_seq_pair(tokens_a, tokens_b, max_length):
     """Truncates a sequence pair in place to the maximum length."""
@@ -673,6 +668,8 @@ def main():
     parser.add_argument('--max_tweet_length', type=int, default=17, help="the maximum length of each tweet")
 
     args = parser.parse_args()
+
+    epochTime = []
 
     if args.bertlayer:
         print("add another bert layer")
@@ -907,6 +904,8 @@ def main():
             model.train()
             tr_loss = 0
             nb_tr_examples, nb_tr_steps = 0, 0
+
+            start = process_time()
             for step, batch in enumerate(tqdm(train_dataloader, desc="Iteration")):
                 batch = tuple(t.to(device) for t in batch)
                 input_ids1, input_mask1, segment_ids1, input_ids2, input_mask2, segment_ids2, \
@@ -936,6 +935,8 @@ def main():
                     optimizer.step()
                     optimizer.zero_grad()
                     global_step += 1
+            end = process_time()
+            epochTime.append(end - start)
 
             '''
             logger.info("***** Running evaluation on Train Set*****")
@@ -1254,6 +1255,10 @@ def main():
             for key in sorted(result.keys()):
                 logger.info("  %s = %s", key, str(result[key]))
                 writer.write("%s = %s\n" % (key, str(result[key])))
+    saveStatus = {}
+    saveStatus['runTime'] = epochTime
+    with open('OnlyRumorTrainTime.json', 'w') as f:
+        f.write(json.dumps(saveStatus))
 
 if __name__ == "__main__":
     main()
