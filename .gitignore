@@ -128,15 +128,11 @@ dmypy.json
 # Pyre type checker
 .pyre/
 
+# add by this repo
 BiGCN/data/*graph/
 .vscode/
 reference/
-dataset/PHEME/all-rnr-annotated-threads/
-oldPHEME/
 nohupout/
-学位论文相关资料/
-semeval2017-task8-dataset/
-semeval2017-task8-test-data/
 log/
 model/
 DualHierarchicalTransformer/output_release/
@@ -156,3 +152,8 @@ DualHierarchicalTransformer/output_v7/
 *.doc
 *.out
 *.m
+
+datasets/PHEME/pheme-rumour-scheme-dataset/
+datasets/PHEME/pheme-rnr-dataset/
+datasets/PHEME/all-rnr-annotated-threads/
+datasets/semeval2017-task8/semeval2017-task8-dataset
