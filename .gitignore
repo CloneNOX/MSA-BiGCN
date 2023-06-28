@@ -156,3 +156,6 @@ datasets/PHEME/pheme-rumour-scheme-dataset/
 datasets/PHEME/pheme-rnr-dataset/
 datasets/PHEME/all-rnr-annotated-threads/
 datasets/semeval2017-task8/semeval2017-task8-dataset
+DualHierarchicalTransformer/
+MT/
+BiGCN/

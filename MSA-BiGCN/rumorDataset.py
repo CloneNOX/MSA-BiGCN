@@ -13,8 +13,16 @@ THREAD_LABEL_FILE = 'thread_label.txt'
 STRUCTURE_FILE = 'structures.json'
 POST_FILE = 'posts.json'
 
-class semEval2017Dataset(Dataset):
-    def __init__(self, dataPath: str, type: str) -> None:
+class PHEMEDataset(Dataset):
+    def __init__(self, dataPath: str) -> None:
+        '''
+        PHEME数据集
+        Input:
+            - dataPath: 数据集预处理后文件目录
+        '''
+        with open(os.path.join(dataPath, THREAD_ID_FILE)) as f:
+            self.thread_id = f.readlines()
+        
         with open(dataPath + type + 'Set.json', 'r') as f:
             content = f.read()
         rawDataset = json.loads(content)
@@ -23,14 +31,12 @@ class semEval2017Dataset(Dataset):
 
         for threadId in rawDataset['threadIds']:
             thread = []
-            stanceTag = []
             structure = rawDataset['structures'][threadId]
             ids = flattenStructure(structure)
             for id in ids:
                 # 需要检查一下数据集中是否有这个id对应的post
-                if id in rawDataset['posts'] and id in rawDataset['stanceTag']:
+                if id in rawDataset['posts']:
                     thread.append([id, rawDataset['posts'][id]['text']])
-                    stanceTag.append(rawDataset['label2IndexStance'][rawDataset['stanceTag'][id]])
             threadIndex, nodeText, edgeIndex = self.structure2graph(threadId, thread, structure)
             self.dataset.append({
                 'threadId': id,
@@ -39,8 +45,8 @@ class semEval2017Dataset(Dataset):
                 'edgeIndexTD': edgeIndex,
                 'edgeIndexBU': torch.flip(edgeIndex, dims=[0]),
                 'rumorTag': torch.LongTensor(
-                    [rawDataset['label2IndexRumor'][rawDataset['rumorTag'][threadId]]]),
-                'stanceTag': torch.LongTensor(stanceTag),
+                    [rawDataset['rumorTags'][threadId]]
+                )
             })
 
     def __getitem__(self, item):
@@ -80,15 +86,8 @@ class semEval2017Dataset(Dataset):
         
         return threadIndex, nodeText, edgeIndex
 
-class PHEMEDataset(Dataset):
-    def __init__(self, dataPath: str) -> None:
-        '''
-        PHEME数据集
-        Input:
-            - dataPath: 数据集预处理后文件目录
-        '''
-        with open(os.path.join(dataPath, THREAD_ID_FILE))
-        
+class semEval2017Dataset(Dataset):
+    def __init__(self, dataPath: str, type: str) -> None:
         with open(dataPath + type + 'Set.json', 'r') as f:
             content = f.read()
         rawDataset = json.loads(content)
@@ -97,12 +96,14 @@ class PHEMEDataset(Dataset):
 
         for threadId in rawDataset['threadIds']:
             thread = []
+            stanceTag = []
             structure = rawDataset['structures'][threadId]
             ids = flattenStructure(structure)
             for id in ids:
                 # 需要检查一下数据集中是否有这个id对应的post
-                if id in rawDataset['posts']:
+                if id in rawDataset['posts'] and id in rawDataset['stanceTag']:
                     thread.append([id, rawDataset['posts'][id]['text']])
+                    stanceTag.append(rawDataset['label2IndexStance'][rawDataset['stanceTag'][id]])
             threadIndex, nodeText, edgeIndex = self.structure2graph(threadId, thread, structure)
             self.dataset.append({
                 'threadId': id,
@@ -111,8 +112,8 @@ class PHEMEDataset(Dataset):
                 'edgeIndexTD': edgeIndex,
                 'edgeIndexBU': torch.flip(edgeIndex, dims=[0]),
                 'rumorTag': torch.LongTensor(
-                    [rawDataset['rumorTags'][threadId]]
-                )
+                    [rawDataset['label2IndexRumor'][rawDataset['rumorTag'][threadId]]]),
+                'stanceTag': torch.LongTensor(stanceTag),
             })
 
     def __getitem__(self, item):
