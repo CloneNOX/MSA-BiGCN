@@ -2,10 +2,16 @@ import torch
 from torch_geometric.data import Data
 from torch.utils.data import Dataset
 import json
-from gensim.models.keyedvectors import KeyedVectors
 from utils import flattenStructure
 from torch.nn.utils.rnn import pad_sequence
 from copy import deepcopy
+import os
+
+THREAD_ID_FILE = 'thread_id.txt'
+POST_ID_FILE = 'post_id.txt'
+THREAD_LABEL_FILE = 'thread_label.txt'
+STRUCTURE_FILE = 'structures.json'
+POST_FILE = 'posts.json'
 
 class semEval2017Dataset(Dataset):
     def __init__(self, dataPath: str, type: str) -> None:
@@ -75,7 +81,14 @@ class semEval2017Dataset(Dataset):
         return threadIndex, nodeText, edgeIndex
 
 class PHEMEDataset(Dataset):
-    def __init__(self, dataPath: str, type: str) -> None:
+    def __init__(self, dataPath: str) -> None:
+        '''
+        PHEME数据集
+        Input:
+            - dataPath: 数据集预处理后文件目录
+        '''
+        with open(os.path.join(dataPath, THREAD_ID_FILE))
+        
         with open(dataPath + type + 'Set.json', 'r') as f:
             content = f.read()
         rawDataset = json.loads(content)
@@ -140,7 +153,7 @@ class PHEMEDataset(Dataset):
         return threadIndex, nodeText, edgeIndex
 
 # 把thread内的nodeFeature转化成Tensor，注意返回的需要是原数据的拷贝，不然会被更改
-def collate(batch):
+def collate_fn(batch):
     thread = deepcopy(batch[0])
     nodeText = []
     for text in thread['nodeText']: # nf: list[word, word...]
