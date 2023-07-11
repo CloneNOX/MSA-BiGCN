@@ -1,6 +1,3 @@
-import gensim
-from gensim.models.keyedvectors import KeyedVectors
-
 # 修改输入的字符串：字母转换为小写，符号/数字与字母分开。返回List[str]
 def fixText(raw: str):
     character = 'abcdefghijklmnopqrstuvwxyz '
