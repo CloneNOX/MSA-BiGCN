@@ -6,10 +6,9 @@ from torch.nn.functional import softmax
 from torch.utils.data import DataLoader
 import argparse
 import numpy as np
-from data import *
 from MSABiGCN import *
 from sklearn.metrics import f1_score
-from utils import *
+from utils import flattenStructure
 from tqdm import tqdm
 from copy import copy
 import sys
