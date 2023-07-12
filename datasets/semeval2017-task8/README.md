@@ -1,4 +1,4 @@
-### PHEME-rnr-Dataset from:
+### SemEval 2017 task 8 from:
 https://alt.qcri.org/semeval2017/task8/index.php?id=data-and-tools
 
 ### 完成处理之后的数据文件格式
