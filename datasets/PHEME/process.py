@@ -5,7 +5,7 @@ from copy import copy
 from convert_veracity_annotations import convert_annotations
 from tqdm import tqdm
 
-DATA_PATH = './all-rnr-annotated-threads/'
+DATA_PATH = '../../../rumorDataset/all-rnr-annotated-threads/'
 EVENT_NAME = [
     'charliehebdo', 
     'ebola-essien', 
@@ -47,13 +47,13 @@ def ProcessRNRDataset():
                 content = f.read()
             structures[id] = json.loads(content)
             # post
-            post = {}
             with open(os.path.join(path, 'source-tweets', str(id) + '.json'), 'r') as f:
                 content = json.loads(f.read())
-            post[id] = {
+            post = {
                 'time': strTime2Timestamp(content['created_at']),
                 'text': content['text']
             }
+            posts[id] = post
             pids = os.listdir(os.path.join(path, 'reactions'))
             for pfname in pids:
                 if '._' not in pfname and '.json' in pfname:
@@ -61,11 +61,11 @@ def ProcessRNRDataset():
                     post_id.append(pid)
                     with open(os.path.join(path, 'reactions', str(pfname)), 'r') as f:
                         content = json.loads(f.read())
-                    post[pid] = {
+                    post = {
                         'time': strTime2Timestamp(content['created_at']),
                         'text': content['text']
                     }
-            posts[id] = post
+                    posts[pid] = post
             
                 
         ids = os.listdir(os.path.join(DATA_PATH, event, 'rumours'))
@@ -85,13 +85,13 @@ def ProcessRNRDataset():
                 content = f.read()
             structures[id] = json.loads(content)
             # post
-            post = {}
             with open(os.path.join(path, 'source-tweets', str(id) + '.json'), 'r') as f:
                 content = json.loads(f.read())
-                post[id] = {
+                post = {
                     'time': strTime2Timestamp(content['created_at']),
                     'text': content['text']
                 }
+            posts[id] = post
             pids = os.listdir(os.path.join(path, 'reactions'))
             for pfname in pids:
                 if '._' not in pfname and '.json' in pfname:
@@ -99,11 +99,11 @@ def ProcessRNRDataset():
                     post_id.append(pid)
                     with open(os.path.join(path, 'reactions', str(pfname)), 'r', encoding='utf8') as f:
                         content = json.loads(f.read())
-                    post[pid] = {
+                    post = {
                         'time': strTime2Timestamp(content['created_at']),
                         'text': content['text']
                     }
-            posts[id] = post
+                    posts[pid] = post
             
     return thread_id, post_id, thread_tag, structures, posts
 
