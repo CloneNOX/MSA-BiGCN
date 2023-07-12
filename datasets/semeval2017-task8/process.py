@@ -1,106 +1,135 @@
 import json
 import os
 import time
-from typing import Dict, List
+from copy import copy
+from tqdm import tqdm
 
-TRAINTAG_PATH = "./semeval2017-task8-dataset/traindev/"
-DEVTAG_PATH = "./semeval2017-task8-dataset/traindev/"
-TESTTAG_PATH = "./semeval2017-task8-test-data/"
-TRAINDEV_DATA_PATH = './semeval2017-task8-dataset/rumoureval-data/'
-TEST_DATA_PATH = "./semeval2017-task8-test-data/"
+DATA_PATH = '../../../rumorDataset/semeval2017/semeval2017-task8-dataset/'
+TEST_SET_PATH = '../../../rumorDataset/semeval2017/semeval2017-task8-test-data/'
+EVENT_NAME = [
+    'charliehebdo', 
+    'ebola-essien', 
+    'ferguson', 
+    'germanwings-crash', 
+    'ottawashooting', 
+    'prince-toronto', 
+    'putinmissing', 
+    'sydneysiege'
+]
 
-EVENT_NAME = ['charliehebdo', 'ebola-essien', 'ferguson', 'germanwings-crash', 'ottawashooting', 'prince-toronto', 'putinmissing', 'sydneysiege']
-
-label2IndexRumor = {'unverified': 0, 'true': 1, 'false': 2}
-label2IndexStance = {'support': 0, 'query': 1, 'deny': 2, 'comment': 3}
-index2LabelRumor = {'0': 'unverified', '1': 'true', '2': 'false'}
-index2LabelStance = {'0': 'support', '1': 'query', '2': 'deny', '3': 'comment'}
-
-# 根据semeval2017 task8数据集的立场标签，获取post的ID标识和立场标签
 def readTrainPostIdAndTag():
-    postIds = []
-    file = open(TRAINTAG_PATH + 'rumoureval-subtaskA-train.json', 'r')
+    '''
+    根据semeval2017 task8训练集的立场标签, 获取post的ID标识和立场标签
+    Output:
+        - post_index: list, post的ID
+        - stance_label: dict{id: stance}, post的立场标注
+    '''
+    post_index = []
+    file = open(os.path.join(DATA_PATH, 'traindev', 'rumoureval-subtaskA-train.json'), 'r')
     posts = json.load(file)
     for key in posts:
-        postIds.append(key)
+        post_index.append(key)
     file.close()
     #print(len(posts1))
 
-    postIds.sort()
-    stanceTag = posts
+    post_index.sort()
+    stance_label = posts
     
-    #print(len(stanceTag))
-    return postIds, stanceTag
+    #print(len(stance_label))
+    return post_index, stance_label
 
 def readDevPostIdAndTag():
-    postIds = []
-    file = open(TRAINTAG_PATH + 'rumoureval-subtaskA-dev.json', 'r')
+    '''
+    根据semeval2017 task8验证集的立场标签, 获取post的ID标识和立场标签
+    Output:
+        - post_index: list, post的ID
+        - stance_label: dict{id: stance}, post的立场标注
+    '''
+    post_index = []
+    file = open(os.path.join(DATA_PATH, 'traindev', 'rumoureval-subtaskA-dev.json'), 'r')
     posts = json.load(file)
     for key in posts:
-        postIds.append(key)
+        post_index.append(key)
     file.close()
     #print(len(posts1))
 
-    postIds.sort()
-    stanceTag = posts
+    post_index.sort()
+    stance_label = posts
 
-    return postIds, stanceTag
+    return post_index, stance_label
 
-# 根据semeval2017 task8数据集的谣言标签，获取thread的ID标识和谣言标签
-def readTrainThreadIdAndTag() -> List[str]:
-    threadsId = []
-    file = open(TRAINTAG_PATH + 'rumoureval-subtaskB-train.json', 'r')
+def readTrainthreadIndexAndTag():
+    '''
+    根据semeval2017 task8训练集的谣言标签获取thread的ID标识和谣言标签
+    Output:
+        - thread_index: list, post的ID
+        - rumor_label: dict{id: stance}, post的立场标注
+    '''
+    thread_index = []
+    file = open(os.path.join(DATA_PATH, 'traindev', 'rumoureval-subtaskB-train.json'), 'r')
     threads = json.load(file)
     for key in threads:
-        threadsId.append(key)
+        thread_index.append(key)
     file.close()
 
-    threadsId.sort()
-    rumorTag = threads
-    return threadsId, rumorTag
+    thread_index.sort()
+    rumor_label = threads
+    return thread_index, rumor_label
 
-def readDevThreadIdAndTag() -> List[str]:
-    threadsId = []
-    file = open(TRAINTAG_PATH + 'rumoureval-subtaskB-dev.json', 'r')
+def readDevthreadIndexAndTag():
+    '''
+    根据semeval2017 task8训练集的谣言标签获取thread的ID标识和谣言标签
+    Output:
+        - thread_index: list, post的ID
+        - rumor_label: dict{id: stance}, post的立场标注
+    '''
+    thread_index = []
+    file = open(os.path.join(DATA_PATH, 'traindev', 'rumoureval-subtaskB-dev.json'), 'r')
     threads = json.load(file)
     for key in threads:
-        threadsId.append(key)
+        thread_index.append(key)
     file.close()
 
-    threadsId.sort()
-    rumorTag = threads
-    return threadsId, rumorTag
+    thread_index.sort()
+    rumor_label = threads
+    return thread_index, rumor_label
 
-# 读入所有post，生成dict{id: {time, text}}
 def readPostsStruct():
+    '''
+    读入所有post和传播树结构
+    Output:
+        - posts: dict{id: {time, text}}
+        - structs: dict{id1: {id2: ..., id3:...}}
+    '''
     posts = {}
     structs = {}
     for name in EVENT_NAME:
-        folderPath = TRAINDEV_DATA_PATH + name
-        threadIdList = os.listdir(folderPath)
-        for threadId in threadIdList:
+        folder_path = os.path.join(DATA_PATH, 'rumoureval-data', name)
+        thread_index_list = os.listdir(folder_path)
+        for thread_index in thread_index_list:
             struct = {}
-            threadPath = folderPath + '/' + threadId + '/'
+            thread_path = os.path.join(folder_path, thread_index)
             # 尝试打开structure.json
             try:
-                f = open(threadPath + 'structure.json', 'r')
+                f = open(os.path.join(thread_path, 'structure.json'), 'r')
             except IOError:
+                print('missing structure.json in path: {}'.format(thread_path))
                 continue
             else:
                 struct = json.load(f)
-                structs[threadId] = struct
+                structs[thread_index] = struct
                 f.close()
             # 处理thread对应的文本和时间
-            with open(threadPath + 'source-tweet/' + threadId + '.json', 'r') as file:
+            with open(os.path.join(thread_path, 'source-tweet', thread_index + '.json'), 'r') as file:
                 data = json.load(file)
                 post = {}
                 post['time'] = strTime2Timestamp(data['created_at'])
                 post['text'] = data['text']
-                posts[threadId] = post
-            fileList = os.listdir(threadPath + '/replies')
+                posts[thread_index] = post
+            fileList = os.listdir(os.path.join(thread_path, 'replies'))
             for fileName in fileList:
                 if '.json' in fileName:
-                    with open(threadPath + '/replies/' + fileName, 'r') as file:
+                    with open(os.path.join(thread_path, 'replies', fileName), 'r') as file:
                         data = json.load(file)
                         post = {}
                         post['time'] = strTime2Timestamp(data['created_at'])
@@ -108,67 +137,89 @@ def readPostsStruct():
                         posts[fileName[0:-5]] = post
     return posts, structs
 
-# 转换字符串时间为时间戳
 def strTime2Timestamp(strTime: str):
+    '''
+    转换字符串时间为时间戳
+    Input:
+        - strTime: str, 时间格式举例: Tue Jan 07 11:38:00 +0000 2014
+    Output:
+        - float: 时间戳
+    '''
     temp = strTime.split(' ')
     temp.pop(-2) # 放弃掉不能读入的时区字段
     strTime = ' '.join(temp)
     structureTime = time.strptime(strTime, '%a %b %d %H:%M:%S %Y')
     return time.mktime(structureTime) # 把结构化时间转化成时间戳
     
-# 根据semeval2017 task8测试集的立场标签，获取post的ID标识和立场标签
 def readTestPostIdAndTag():
-    postIds = []
-    file = open(TESTTAG_PATH + 'testStance.json', 'r')
-    stanceTag = json.load(file)
-    for key in stanceTag:
-        postIds.append(key)
+    '''
+    根据semeval2017 task8测试集的立场标签, 获取post的ID标识和立场标签
+    Output:
+        - post_index: list, post的ID
+        - stance_label: dict{id: stance}, post的立场标注
+    '''
+    post_index = []
+    file = open(os.path.join(TEST_SET_PATH + 'subtaska.json'), 'r')
+    stance_label = json.load(file)
+    for key in stance_label:
+        post_index.append(key) 
     file.close()
 
-    postIds.sort()
-    return postIds, stanceTag
+    post_index.sort()
+    return post_index, stance_label
 
-# 根据semeval2017 task8测试集的谣言标签，获取thread的ID标识和谣言标签
-def readTestThreadIdAndTag() -> List[str]:
-    threadsId = []
-    file = open(TESTTAG_PATH + 'testRumor.json', 'r')
-    rumorTag = json.load(file)
-    for key in rumorTag:
-        threadsId.append(key)
+def readTestthreadIndexAndTag():
+    '''
+    根据semeval2017 task8测试集的谣言标签获取thread的ID标识和谣言标签
+    Output:
+        - thread_index: list, post的ID
+        - rumor_label: dict{id: stance}, post的立场标注
+    '''
+    thread_index = []
+    file = open(os.path.join(TEST_SET_PATH + 'subtaskb.json'), 'r')
+    rumor_label = json.load(file)
+    for key in rumor_label:
+        thread_index.append(key)
     file.close()
 
-    threadsId.sort()
-    return threadsId, rumorTag
+    thread_index.sort()
+    return thread_index, rumor_label
 
-# 读入测试集所有post，生成dict{id: {time, text}}
 def readTestPostsStruct():
+    '''
+    读入测试集post和传播树结构
+    Output:
+        - posts: dict{id: {time, text}}
+        - structs: dict{id1: {id2: ..., id3:...}}
+    '''
     posts = {}
     structs = {}
-    folderPath = TEST_DATA_PATH
-    threadIdList = os.listdir(folderPath)
-    for threadId in threadIdList:
+    folder_path = TEST_SET_PATH
+    thread_index_list = os.listdir(folder_path)
+    for thread_index in thread_index_list:
         struct = {}
-        threadPath = folderPath + '/' + threadId + '/'
+        thread_path = os.path.join(folder_path, thread_index)
         # 尝试打开structure.json
         try:
-            f = open(threadPath + 'structure.json', 'r')
+            f = open(os.path.join(thread_path, 'structure.json'), 'r')
         except IOError:
+            print('missing structure.json in path: {}'.format(thread_path))
             continue
         else:
             struct = json.load(f)
-            structs[threadId] = struct
+            structs[thread_index] = struct
             f.close()
         # 处理thread对应的文本和时间
-        with open(threadPath + 'source-tweet/' + threadId + '.json', 'r') as file:
+        with open(os.path.join(thread_path, 'source-tweet', thread_index + '.json'), 'r') as file:
             data = json.load(file)
             post = {}
             post['time'] = strTime2Timestamp(data['created_at'])
             post['text'] = data['text']
-            posts[threadId] = post
-        fileList = os.listdir(threadPath + '/replies')
+            posts[thread_index] = post
+        fileList = os.listdir(os.path.join(thread_path, 'replies'))
         for fileName in fileList:
             if '.json' in fileName:
-                with open(threadPath + '/replies/' + fileName, 'r') as file:
+                with open(os.path.join(thread_path, 'replies', fileName), 'r') as file:
                     data = json.load(file)
                     post = {}
                     post['time'] = strTime2Timestamp(data['created_at'])
