@@ -31,29 +31,29 @@ def ProcessRNRDataset():
         if '.' in event: continue
 
         ids = os.listdir(os.path.join(DATA_PATH, event, 'non-rumours'))
-        for id in tqdm(ids, desc='non-rumor {}'.format(event)):
-            if '.' in id: continue
-            path = os.path.join(DATA_PATH, event, 'non-rumours', str(id))
+        for tid in tqdm(ids, desc='{} non-rumor'.format(event)):
+            if '.' in tid: continue
+            path = os.path.join(DATA_PATH, event, 'non-rumours', str(tid))
             
             # source tweet id
-            thread_id.append(id)
-            post_id.append(id)
+            thread_id.append(tid)
+            post_id.append(tid)
             
             # thread tag(non-rumor)
-            thread_tag[id] = 0
+            thread_tag[tid] = 0
             
             # structure
             with open(os.path.join(path, 'structure.json'), 'r') as f:
                 content = f.read()
-            structures[id] = json.loads(content)
+            structures[tid] = json.loads(content)
             # post
-            with open(os.path.join(path, 'source-tweets', str(id) + '.json'), 'r') as f:
+            with open(os.path.join(path, 'source-tweets', str(tid) + '.json'), 'r') as f:
                 content = json.loads(f.read())
             post = {
                 'time': strTime2Timestamp(content['created_at']),
                 'text': content['text']
             }
-            posts[id] = post
+            posts[tid] = post
 
             pids = os.listdir(os.path.join(path, 'reactions'))
             for pfname in pids:
@@ -70,29 +70,29 @@ def ProcessRNRDataset():
             
                 
         ids = os.listdir(os.path.join(DATA_PATH, event, 'rumours'))
-        for id in tqdm(ids, desc='rumor {}'.format(event)):
-            if '.' in id: continue
-            path = os.path.join(DATA_PATH, event, 'rumours', str(id))
+        for tid in tqdm(ids, desc='{} rumor'.format(event)):
+            if '.' in tid: continue
+            path = os.path.join(DATA_PATH, event, 'rumours', str(tid))
             # id
-            thread_id.append(id)
-            post_id.append(id)
+            thread_id.append(tid)
+            post_id.append(tid)
             # tag
             with open(os.path.join(path, 'annotation.json'), 'r') as f:
                 annotation = json.loads(f.read())
                 label = convert_annotations(annotation)
-            thread_tag[id] = label2Index[label]
+            thread_tag[tid] = label2Index[label]
             # structure
             with open(os.path.join(path, 'structure.json'), 'r') as f:
                 content = f.read()
-            structures[id] = json.loads(content)
+            structures[tid] = json.loads(content)
             # post
-            with open(os.path.join(path, 'source-tweets', str(id) + '.json'), 'r') as f:
+            with open(os.path.join(path, 'source-tweets', str(tid) + '.json'), 'r') as f:
                 content = json.loads(f.read())
             post = {
                 'time': strTime2Timestamp(content['created_at']),
                 'text': content['text']
             }
-            posts[id] = post
+            posts[tid] = post
             
             pids = os.listdir(os.path.join(path, 'reactions'))
             for pfname in pids:
@@ -107,7 +107,7 @@ def ProcessRNRDataset():
                     }
                     posts[pid] = post
             
-    return thread_id, post_id, thread_tag, structures, posts
+    return thread_id, list(set(post_id)), thread_tag, structures, posts
 
 # 转换字符串时间为时间戳
 def strTime2Timestamp(strTime: str):
