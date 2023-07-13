@@ -15,22 +15,23 @@ RUMOR_CATEGPRY = 'rumorCategory.json'
 STANCE_CATEGPRY = 'stanceCategory.json'
 
 class RumorDataset(Dataset):
-    def __init__(self, data_path: str, tokenizer: BertTokenizer) -> None:
+    def __init__(self, data_path: str, type: str, tokenizer: BertTokenizer) -> None:
         '''
         PHEME数据集
         Input:
             - data_path: 数据集预处理后文件目录
+            - type: 数据集类型, 用于找到数据文件的路径
             - tokenizer: 词划分器
         '''
-        with open(os.path.join(data_path, 'all', THREAD_ID_FILE)) as f:
+        with open(os.path.join(data_path, type, THREAD_ID_FILE)) as f:
             self.all_thread_id = [line.strip() for line in f.readlines()] # list
-        with open(os.path.join(data_path, 'all', POST_ID_FILE)) as f:
+        with open(os.path.join(data_path, type, POST_ID_FILE)) as f:
             self.all_post_id = [line.strip() for line in f.readlines()] # list
-        with open(os.path.join(data_path, 'all', THREAD_LABEL_FILE)) as f:
+        with open(os.path.join(data_path, type, THREAD_LABEL_FILE)) as f:
             self.all_thread_label = [line.strip() for line in f.readlines()] # list, 读入的是str形式
-        with open(os.path.join(data_path, 'all', STRUCTURE_FILE)) as f:
+        with open(os.path.join(data_path, type, STRUCTURE_FILE)) as f:
             self.all_structure = json.load(f) # dict
-        with open(os.path.join(data_path, 'all', POST_FILE)) as f:
+        with open(os.path.join(data_path, type, POST_FILE)) as f:
             self.all_post = json.load(f) # dict
         with open(os.path.join(data_path, RUMOR_CATEGPRY)) as f:
             self.category = json.load(f) #dict
@@ -126,7 +127,7 @@ class RumorDataset(Dataset):
         return node_token, edge_index_TD, edge_index_BU, root_index, torch.LongTensor([int(label)])
 
 class RumorStanceDataset(Dataset):
-    def __init__(self, data_path: str, tokenizer: BertTokenizer, type='traindsev'):
+    def __init__(self, data_path: str, type: str, tokenizer: BertTokenizer):
         '''
         SemEval数据集
         Input:
