@@ -54,6 +54,7 @@ def ProcessRNRDataset():
                 'text': content['text']
             }
             posts[id] = post
+
             pids = os.listdir(os.path.join(path, 'reactions'))
             for pfname in pids:
                 if '._' not in pfname and '.json' in pfname:
@@ -87,11 +88,12 @@ def ProcessRNRDataset():
             # post
             with open(os.path.join(path, 'source-tweets', str(id) + '.json'), 'r') as f:
                 content = json.loads(f.read())
-                post = {
-                    'time': strTime2Timestamp(content['created_at']),
-                    'text': content['text']
-                }
+            post = {
+                'time': strTime2Timestamp(content['created_at']),
+                'text': content['text']
+            }
             posts[id] = post
+            
             pids = os.listdir(os.path.join(path, 'reactions'))
             for pfname in pids:
                 if '._' not in pfname and '.json' in pfname:
