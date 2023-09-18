@@ -20,7 +20,6 @@ class ABGCN(nn.Module):
         needStance = True, # 是否结合stance的特征进GCN里
         batchFirst = True,
         dropout = 0.0 # 模型默认使用的drop out概率
-        device = 'cuda'
     ):
         super().__init__()
         self.device = 'cpu'

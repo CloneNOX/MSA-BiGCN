@@ -1,40 +1,49 @@
 import torch
+from torch_geometric.data import Data
+from torch.utils.data import Dataset
 from torch import optim
 from torch.nn.functional import softmax
-from torch.utils.data import DataLoader, random_split
+from torch.utils.data import DataLoader
 import argparse
 import numpy as np
-from MSABiGCN import MSABiGCNOnlyRumor
-from transformers import BertTokenizer, BertModel
-from rumorDataset import RumorDataset
+from data import *
+from MSABiGCN import *
 from sklearn.metrics import f1_score
+from utils import *
 from tqdm import tqdm
 from copy import copy
 from time import process_time
-import json
-import logging
+import sys
 
 parser = argparse.ArgumentParser(description="Training script for ABGCN")
 
 # model hyperparameters
-parser.add_argument('--bert_path' ,type=str, default='../model/bert-base-cased',\
-                    help="path to bert model, default: '../model/bert-base-cased'")
-parser.add_argument('--embedding_dim' ,type=int, default=768,\
+parser.add_argument('--w2vDim', type=int, default=50,\
+                    help='dimention of word2vec, default: 50')
+parser.add_argument('--s2vDim' ,type=int, default=64,\
                     help='dimention of sentence2vec(get from lstm/attention)')
-parser.add_argument('--GCN_hidden_dim', type=int, default=384,\
-                    help='dimention of GCN hidden layer, default: 384')
-parser.add_argument('--rumor_feature_dim', type=int, default=384,\
-                    help='dimention of GCN output, default: 384')
-parser.add_argument('--dropout', type=float, default=0.1,\
-                    help='dropout rate for model, default: 0.1')
+parser.add_argument('--w2vAttHeads', type=int, default=1,\
+                    help='heads of multi-heads self-attention in word2vec layer, default: 1')
+parser.add_argument('--s2vAttHeads', type=int, default=1,\
+                    help='heads of multi-heads self-attention in sentence2vec layer, default: 1')
+parser.add_argument('--gcnHiddenDim', type=int, default=256,\
+                    help='dimention of GCN hidden layer, default: 256')
+parser.add_argument('--rumorFeatureDim', type=int, default=256,\
+                    help='dimention of GCN output, default: 256')
+parser.add_argument('--dropout', type=float, default=0.0,\
+                    help='dropout rate for model, default: 0.0')
+parser.add_argument('--needStance', type=str, default='True',\
+                    help='whether use stance feature in rumor detection, default: True')
 # dataset parameters
-parser.add_argument('--data_path', type=str, default='../datasets/PHEME/',\
-                    help='path to training dataset, default: ../datasets/PHEME/')
+parser.add_argument('--dataPath', type=str, default='../dataset/semeval2017-task8/',\
+                    help='path to training dataset, default: ../dataset/semeval2017-task8/')
+parser.add_argument('--w2vPath', type=str, default='../dataset/glove/',\
+                    help='path to word2vec dataset, default: ../dataset/glove/')
 # train parameters
-parser.add_argument('--optimizer', type=str, default='AdamW',\
-                    help='set optimizer type in [SGD/Adam/AdamW...], default: AdamW')
-parser.add_argument('--lr', type=float, default=1e-4,\
-                    help='set learning rate, default: 1e-4')
+parser.add_argument('--optimizer', type=str, default='Adam',\
+                    help='set optimizer type in [SGD/Adam], default: Adam')
+parser.add_argument('--lr', type=float, default=3e-5,\
+                    help='set learning rate, default: 3e-5')
 parser.add_argument('--weightDecay', type=float, default=5e-4,\
                     help='set weight decay for L2 Regularization, default: 5e-4')
 parser.add_argument('--epoch', type=int, default=100,\
@@ -43,53 +52,72 @@ parser.add_argument('--patience', type=int, default=50,\
                     help='epoch to stop training, default: 50')
 parser.add_argument('--device', type=str, default='cuda',\
                     help='select device(cuda/cpu), default: cuda')
-parser.add_argument('--log_file', type=str, default='../log/log.txt',\
-                    help='log file name, default: ../log/log.txt')
-parser.add_argument('--savePath', type=str, default='../model/best.pt',\
-                    help='path to save model, default: ../model/best.pt')
+parser.add_argument('--logName', type=str, default='./log/log.txt',\
+                    help='log file name, default: ./log/log.txt')
+parser.add_argument('--savePath', type=str, default='./model/model.pt',\
+                    help='path to save model, default: ./model/model.txt')
 parser.add_argument('--lossRatio', type=float, default=1.,\
                     help='ratio for loss-on-rumor:loss-on-stance, default: 1.0')
 
 def main():
     args = parser.parse_args()
-    logging.basicConfig(
-        filename=args.log_file, 
-        filemode="w", 
-        format="[%(asctime)s]:%(levelname)s: %(message)s", 
-        datefmt="%d-%M-%Y %H:%M:%S", 
-        level=logging.DEBUG
-    )
     
     # 获取数据集及词嵌入
-    print('preparing data...', end='', flush=True)
-    tokenizer = BertTokenizer.from_pretrained(args.bert_path)
-
-    if 'PHEME' in args.data_path:
-        dataset = RumorDataset(args.data_path, 'all', tokenizer=tokenizer)
-        train_size = dataset.__len__() // 10 * 8
-        dev_size = dataset.__len__() // 10 * 9 - train_size
-        test_size = dataset.__len__() - train_size - dev_size
-        train_set, dev_set, test_set = random_split(dataset, [train_size, dev_size, test_size])
-
-        train_loader = DataLoader(train_set, shuffle=True, collate_fn=RumorDataset.collate_fn)
-        dev_loader = DataLoader(dev_set, shuffle=True, collate_fn=RumorDataset.collate_fn)
-        test_loader = DataLoader(test_set, shuffle=True, collate_fn=RumorDataset.collate_fn)
-        category = dataset.category
+    print('preparing data...', end='')
+    sys.stdout.flush()
+    if 'PHEME' in args.dataPath:
+        datasetType = 'PHEME'
     else:
-        dataset = RumorDataset(args.data_path, 'traindev', tokenizer=tokenizer)
-        train_size = dataset.__len__() // 10 * 8
-        dev_size = dataset.__len__() - train_size
-        train_set, dev_set = random_split(dataset, [train_size, dev_size])
-        
-        test_set = RumorDataset(args.data_path, 'test', tokenizer=tokenizer)
+        datasetType = 'semEval'
+    if datasetType == 'semEval':
+        dataset = semEval2017Dataset(
+            dataPath = args.dataPath, 
+            type = 'train'
+        )
+        testDataset = semEval2017Dataset(
+            dataPath = args.dataPath, 
+            type = 'test'
+        )
+    elif datasetType == 'PHEME':
+        dataset = PHEMEDataset(
+            dataPath = args.dataPath, 
+            type = 'train'
+        )
+        testDataset = PHEMEDataset(
+            dataPath = args.dataPath, 
+            type = 'test'
+        )
+    loader = DataLoader(dataset, shuffle = True, num_workers = 4, collate_fn=collate)
+    testLoader = DataLoader(testDataset, shuffle = True, num_workers = 4, collate_fn=collate)
+    with open(args.dataPath + 'trainSet.json', 'r') as f:
+        content = f.read()
+    rawDataset = json.loads(content)
+    if datasetType == 'semEval':
+        label2IndexRumor = copy(rawDataset['label2IndexRumor'])
+    elif datasetType == 'PHEME':
+        label2IndexRumor = copy(rawDataset['label2Index'])
+    del rawDataset
 
-        train_loader = DataLoader(train_set, shuffle=True, collate_fn=RumorDataset.collate_fn)
-        dev_loader = DataLoader(dev_set, shuffle=True, collate_fn=RumorDataset.collate_fn)
-        test_loader = DataLoader(test_set, shuffle=True, collate_fn=RumorDataset.collate_fn)
-        category = dataset.category
-    print('done.', flush=True)
+    word2vec = KeyedVectors.load_word2vec_format(
+        '../dataset/glove/glove.twitter.27B.' + str(args.w2vDim) + 'd.gensim.txt',
+        binary=False
+    )
+    vectorSize = word2vec.vector_size
+    word2vec.add_vectors(["<start>", "<end>", "<unk>"] ,np.random.randn(3, vectorSize))
+    with open(args.dataPath + 'wordList.json', 'r') as f:
+        content = f.read()
+    wordList = ["<unk>", "<start>", "<end>"]
+    wordList += (json.loads(content)).keys()
+    word2index = {}
+    index = 1
+    for word in wordList:
+        if word in word2vec:
+            word2index[word] = index
+            index += 1
+    print('done.')
 
     # 选定实验设备
+    f = open(args.logName, 'w')
     if 'cuda' in args.device:
         device = torch.device((args.device if torch.cuda.is_available() else 'cpu'))
         if torch.cuda.is_available():
@@ -99,37 +127,36 @@ def main():
     else:
         device = torch.device('cpu')
         trainInfo = 'train MSABiGCN on device: cpu\n'
-    logging.info(trainInfo)
+    f.write(trainInfo)
+    print(trainInfo)
+    f.close()
     
     # 声明模型、损失函数、优化器
-    bert_model = BertModel.from_pretrained(args.bert_path)
-
     model = MSABiGCNOnlyRumor(
-        bert_model = bert_model,
-        embedding_dim = args.embedding_dim,
-        GCN_hidden_dim = args.GCN_hidden_dim, # GCN隐藏层的维度（GCNconv1的输出维度）
-        rumor_feature_dim = args.rumor_feature_dim, # GCN输出层的维度
-        rumor_tag_num = len(category), # 谣言标签种类数
-        batch_first = True,
-        dropout = args.dropout, # 模型默认使用的drop out概率
-        device = device
+        word2vec = word2vec,
+        word2index = word2index,
+        s2vDim = args.s2vDim,
+        gcnHiddenDim = args.gcnHiddenDim,
+        rumorFeatureDim = args.rumorFeatureDim,
+        numRumorTag = len(label2IndexRumor),
+        w2vAttentionHeads = args.w2vAttHeads,
+        s2vAttentionHeads = args.s2vAttHeads,
+        dropout = args.dropout
     )
     model = model.set_device(device)
-    logging.info(model.__str__())
+    print(model)
     loss_func = torch.nn.CrossEntropyLoss(reduction='mean').to(device)
-    bert_params = list(map(id, model.bert_model.parameters()))
-    base_params = filter(lambda p:id(p) not in bert_params, model.parameters())
-    if args.optimizer == 'AdamW':
+    GCNParams = list(map(id, model.biGCN.parameters()))
+    baseParams = filter(lambda p:id(p) not in GCNParams, model.parameters())
+    if args.optimizer == 'Adam':
         optimizer = optim.AdamW([
-            {'params': base_params}
-        ], lr = args.lr, weight_decay = args.weightDecay)
-    elif args.optimizer == 'AdamW':
-        optimizer = optim.Adam([
-            {'params': base_params}
+            {'params': baseParams},
+            {'params': model.biGCN.parameters(), 'lr': args.lr / 5}
         ], lr = args.lr, weight_decay = args.weightDecay)
     else:
         optimizer = optim.SGD([
-            {'params': base_params}
+            {'params': baseParams},
+            {'params': GCNParams, 'lr': args.lr / 5}
         ], lr = args.lr, momentum = 0.9, weight_decay = args.weightDecay)
     
     start = 1
@@ -142,49 +169,64 @@ def main():
     trainRumorF1 = []
     trainLoss = []
 
-    devRumorAcc = []
-    devRumorF1 = []
-    devLoss = []
+    testRumorAcc = []
+    testRumorF1 = []
+    testLoss = []
 
     epochTime = []
 
     for epoch in range(start, args.epoch + 1):
-        logging.info('[epoch: {:d}] '.format(epoch))
+        f = open(args.logName, 'a')
+        f.write('[epoch: {:d}] '.format(epoch))
 
         # 训练模型
-        rumorTruth = []
+        rumorTrue = []
         rumorPre = []
         totalLoss = 0.
         
         model.train()
         startTime = process_time()
-        for node_token, edge_index_TD, edge_index_BU, root_index, label in tqdm(
-            train_loader, 
-            desc="[epoch: {:d}, training] ".format(epoch), 
+        for thread in tqdm(
+            iter(loader), 
+            desc="[epoch: {:d}] ".format(epoch), 
             leave=False, 
             ncols=100
         ):
-            label = label.to(device)
-            rumorTruth += label.tolist()
+            rumorTag = thread['rumorTag'].to(device)
+            rumorTrue += thread['rumorTag'].tolist()
+            
+            nodeText = thread['nodeText']
+            for i in range(len(nodeText)):
+                indexList = []
+                for word in nodeText[i]:
+                    if word in word2index:
+                        indexList.append(word2index[word])
+                    elif word != '':
+                        indexList.append(word2index['<unk>'])
+                nodeText[i] = torch.IntTensor(indexList).to(device)
+            nodeText = pad_sequence(nodeText, padding_value=0, batch_first=True)
+            thread['nodeText'] = nodeText
 
             optimizer.zero_grad()
-            rumorPredict = model.forward(node_token, edge_index_TD, edge_index_BU, root_index)
-            loss = loss_func(rumorPredict, label)
+            rumorPredict = model.forward(thread)
+            loss = loss_func(rumorPredict, rumorTag)
             totalLoss += loss
             loss.backward()
             optimizer.step()
             
             rumorPredict = softmax(rumorPredict, dim=1)
             rumorPre += rumorPredict.max(dim=1)[1].tolist()
-        
-        logging.info('average loss: {:f}'.format(
-            totalLoss / len(train_loader)
+        f.write('average loss: {:f}\n'.format(
+            totalLoss / len(loader)
         ))
-        trainLoss.append((totalLoss / len(train_loader)).item())
+        trainLoss.append((totalLoss / len(loader)).item())
         
-        macroF1 = f1_score(rumorTruth, rumorPre, labels=range(len(category)), average='macro')
-        acc = (np.array(rumorTruth) == np.array(rumorPre)).sum() / len(rumorTruth)
-        logging.info("    rumor detection accuracy: {:.4f}, macro-f1: {:.4f}".format(
+        if datasetType == 'semEval':
+            macroF1 = f1_score(rumorTrue, rumorPre, labels=[0,1,2], average='macro')
+        elif datasetType == 'PHEME':
+            macroF1 = f1_score(rumorTrue, rumorPre, labels=[0,1,2,3], average='macro')
+        acc = (np.array(rumorTrue) == np.array(rumorPre)).sum() / len(rumorTrue)
+        f.write("    rumor detection accuracy: {:.4f}, macro-f1: {:.4f}\n".format(
             acc,
             macroF1
         ))
@@ -194,106 +236,97 @@ def main():
         endTime = process_time()
         epochTime.append(endTime - startTime)
     
-        # 验证集测试并保存最好模型
-        logging.info('==================================================')
-        logging.info('test model on dev set')
-        rumorTruth = []
-        rumorPre = []
-        totalLoss = 0.
+        # 测试并保存模型
+        if epoch % 5 == 0: # 每1个eopch进行一次测试，使用测试集数据
+            f.write('==================================================\ntest model on test set\n')
+            rumorTrue = []
+            rumorPre = []
+            totalLoss = 0.
 
-        model.eval()
-        for node_token, edge_index_TD, edge_index_BU, root_index, label in tqdm(
-            dev_loader, 
-            desc="[epoch: {:d}, dev set test]".format(epoch), 
-            leave=False, 
-            ncols=80
-        ):
-            with torch.no_grad():
-                rumorTag = label.to(device)
-                rumorTruth += label.tolist()
+            model.eval()
+            for thread in tqdm(
+                iter(testLoader), 
+                desc="[epoch: {:d}, test]".format(epoch), 
+                leave=False, 
+                ncols=80
+            ):
+                rumorTag = thread['rumorTag'].to(device)
+                rumorTrue += thread['rumorTag'].tolist()
 
-                rumorPredict = model.forward(node_token, edge_index_TD, edge_index_BU, root_index)
+                nodeText = thread['nodeText']
+                for i in range(len(nodeText)):
+                    indexList = []
+                    for word in nodeText[i]:
+                        if word in word2index:
+                            indexList.append(word2index[word])
+                        elif word != '':
+                            indexList.append(word2index['<unk>'])
+                    nodeText[i] = torch.IntTensor(indexList).to(device)
+                nodeText = pad_sequence(nodeText, padding_value=0, batch_first=True)
+                thread['nodeText'] = nodeText
+                
+                rumorPredict = model.forward(thread)
                 loss = loss_func(rumorPredict, rumorTag)
                 totalLoss += loss
 
                 rumorPredict = softmax(rumorPredict, dim=1)
-            rumorPre += rumorPredict.max(dim=1)[1].tolist()
+                rumorPre += rumorPredict.max(dim=1)[1].tolist()
 
-        macroF1 = f1_score(rumorTruth, rumorPre, labels=range(len(category)), average='macro')
-        accRumor = (np.array(rumorTruth) == np.array(rumorPre)).sum() / len(rumorPre)
+            if datasetType == 'semEval':
+                macroF1Rumor = f1_score(rumorTrue, rumorPre, labels=[0,1,2], average='macro')
+            elif datasetType == 'PHEME':
+                macroF1Rumor = f1_score(rumorTrue, rumorPre, labels=[0,1,2,3], average='macro')
+            accRumor = (np.array(rumorTrue) == np.array(rumorPre)).sum() / len(rumorPre)
             
-        #==============================================
-        # 保存验证集marco F1和最大时的模型
-        if macroF1 > maxF1Test:
-            model.save(args.savePath)
-            earlyStopCounter = 0
-            saveStatus = {
-                'epoch': epoch,
-                'macroF1Rumor': macroF1,
-                'accRumor': accRumor,
-                'loss': (totalLoss / len(dev_loader)).item()
-            }
-            maxF1Test = max(maxF1Test, macroF1)
-            logging.info('saved model')
-        else:
-            earlyStopCounter += 1
-        #==============================================
-        logging.info('average loss: {:f}'.format(totalLoss / len(dev_loader)))
-        logging.info('    rumor detection: accuracy: {:f}, macro-f1: {:f}'.format(
-            accRumor, 
-            macroF1
-        ))
-        logging.info('early stop counter: {:d}'.format(earlyStopCounter))
-        logging.info('========================================')
-        devLoss.append((totalLoss / len(dev_loader)).item())
-        devRumorAcc.append(accRumor)
-        devRumorF1.append(macroF1)
-        if earlyStopCounter >= args.patience: # 验证集上连续多次测试性能没有提升就早停
-            logging.info('early stop when F1 on dev set did not increase')
-            break
-    logging.info(saveStatus)
-    logging.info('\n\nbest model save at epoch {:d},\
-            \nmarco F1 rumor: {:f}, acc rumor {:f}\n'.format(
-                saveStatus['epoch'],
-                saveStatus['macroF1Rumor'], saveStatus['accRumor']
+#==============================================
+# 保存验证集marco F1和最大时的模型
+            if macroF1Rumor > maxF1Test:
+                model.save(args.savePath)
+                earlyStopCounter = 0
+                saveStatus = {
+                    'epoch': epoch,
+                    'macroF1Rumor': macroF1Rumor,
+                    'accRumor': accRumor,
+                    'loss': (totalLoss / len(testLoader)).item()
+                }
+                maxF1Test = max(maxF1Test, macroF1Rumor)
+                f.write('saved model\n')
+            else:
+                earlyStopCounter += 1
+#==============================================
+            f.write('average joint-loss: {:f}\n'.format(totalLoss / len(testLoader)))
+            f.write('rumor detection:\n')
+            f.write('accuracy: {:f}, macro-f1: {:f}\n'.format(
+                accRumor, 
+                macroF1Rumor
             ))
+            f.write('early stop counter: {:d}\n'.format(earlyStopCounter))
+            f.write('========================================\n')
+            testLoss.append((totalLoss / len(testLoader)).item())
+            testRumorAcc.append(accRumor)
+            testRumorF1.append(macroF1Rumor)
+        f.close()
+        if earlyStopCounter >= 10: # 验证集上连续多次测试性能没有提升就早停
+            print('early stop when F1 on dev set did not increase')
+            break
+    print(saveStatus)
+    with open(args.logName, 'a') as f:
+        f.write('\n\nsave model at epoch {:d},\
+                \nmarco F1 rumor: {:f}, acc rumor {:f}\n'.format(
+                    saveStatus['epoch'],
+                    saveStatus['macroF1Rumor'], saveStatus['accRumor']
+                ))
 
     # saveStatus['trainRumorAcc'] = trainRumorAcc
     # saveStatus['trainRumorF1'] = trainRumorF1
     # saveStatus['trainLoss'] = trainLoss
 
-    # saveStatus['devRumorAcc'] = devRumorAcc
-    # saveStatus['devRumorF1'] = devRumorF1
-    # saveStatus['devLoss'] = devLoss
-    # saveStatus['runTime'] = epochTime
-    # logging.info(json.dumps(saveStatus))
-
-    # 在测试集测试
-    model.eval()
-    for node_token, edge_index_TD, edge_index_BU, root_index, label in tqdm(
-        dev_loader, 
-        desc="[test set test]", 
-        leave=False, 
-        ncols=80
-    ):
-        with torch.no_grad():
-            rumorTag = label.to(device)
-            rumorTruth += label.tolist()
-
-            rumorPredict = model.forward(node_token, edge_index_TD, edge_index_BU, root_index)
-            loss = loss_func(rumorPredict, rumorTag)
-            totalLoss += loss
-
-            rumorPredict = softmax(rumorPredict, dim=1)
-        rumorPre += rumorPredict.max(dim=1)[1].tolist()
-
-    macroF1 = f1_score(rumorTruth, rumorPre, labels=range(len(category)), average='macro')
-    accRumor = (np.array(rumorTruth) == np.array(rumorPre)).sum() / len(rumorPre)
-    logging.info('average loss: {:f}'.format(totalLoss / len(dev_loader)))
-    logging.info('rumor detection: accuracy: {:f}, macro-f1: {:f}'.format(
-        accRumor, 
-        macroF1
-    ))
+    saveStatus['testRumorAcc'] = testRumorAcc
+    saveStatus['testRumorF1'] = testRumorF1
+    saveStatus['testLoss'] = testLoss
+    saveStatus['runTime'] = epochTime
+    with open(args.logName[:-4] + '.json', 'w') as f:
+        f.write(json.dumps(saveStatus))
 # end main()
 
 if __name__ == '__main__':
