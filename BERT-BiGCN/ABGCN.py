@@ -19,7 +19,7 @@ class ABGCN(nn.Module):
         s2vAttentionHeads = 8, # sentence2vec multi-head attention中使用的头数
         needStance = True, # 是否结合stance的特征进GCN里
         batchFirst = True,
-        dropout = 0.0 # 模型默认使用的drop out概率
+        dropout = 0.0, # 模型默认使用的drop out概率
         device = 'cuda'
     ):
         super().__init__()

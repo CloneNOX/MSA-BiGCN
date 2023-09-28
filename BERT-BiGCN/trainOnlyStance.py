@@ -4,7 +4,7 @@ from torch.nn.functional import softmax
 from torch.utils.data import DataLoader, random_split
 import argparse
 import numpy as np
-from MSABiGCN import BertMSA
+from BertBiGCN import BertMSA
 from transformers import BertTokenizer, BertModel
 from rumorDataset import RumorStanceDataset
 from sklearn.metrics import f1_score
@@ -14,7 +14,7 @@ from time import process_time
 import json
 import logging
 
-parser = argparse.ArgumentParser(description="Training script for ABGCN")
+parser = argparse.ArgumentParser()
 
 # model hyperparameters
 parser.add_argument('--bert_path' ,type=str, default='../model/bert-base-cased',\
@@ -33,14 +33,14 @@ parser.add_argument('--calss_num', type=int, default=4,\
 # train parameters
 parser.add_argument('--optimizer', type=str, default='AdamW',\
                     help='set optimizer type in [SGD/Adam/AdamW...], default: AdamW')
-parser.add_argument('--lr', type=float, default=1e-3,\
-                    help='set learning rate, default: 1e-4')
+parser.add_argument('--lr', type=float, default=2e-5,\
+                    help='set learning rate, default: 2e-5')
 parser.add_argument('--weightDecay', type=float, default=5e-4,\
                     help='set weight decay for L2 Regularization, default: 5e-4')
-parser.add_argument('--epoch', type=int, default=100,\
-                    help='epoch to train, default: 100')
-parser.add_argument('--patience', type=int, default=50,\
-                    help='epoch to stop training, default: 50')
+parser.add_argument('--epoch', type=int, default=20,\
+                    help='epoch to train, default: 20')
+parser.add_argument('--patience', type=int, default=5,\
+                    help='epoch to stop training, default: 5')
 parser.add_argument('--device', type=str, default='cuda',\
                     help='select device(cuda/cpu), default: cuda')
 parser.add_argument('--log_file', type=str, default='../log/log-only-stance.txt',\
@@ -105,7 +105,7 @@ def main():
     model = BertMSA(
         bert_model = bert_model,
         embedding_dim = args.embedding_dim,
-        numStanceTag = args.calss_num,
+        num_stance_tag = len(category),
         batch_first = True
     )
     model = model.set_device(device)
@@ -249,7 +249,7 @@ def main():
     logging.info('\n\nbest model save at epoch {:d},\
             \nmarco F1 stance: {:f}, acc stance {:f}\n'.format(
                 saveStatus['epoch'],
-                saveStatus['macroFStance'], saveStatus['accStance']
+                saveStatus['macroF1Stance'], saveStatus['accStance']
             ))
 
     # saveStatus['trainStanceAcc'] = trainStanceAcc

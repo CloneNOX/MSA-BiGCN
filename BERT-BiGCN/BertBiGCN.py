@@ -39,7 +39,8 @@ class BertBiGCNOnlyRumor(nn.Module):
             self.rumor_tag_num, 
             dropout = dropout
         ).to(self.device)
-        self.feature2label = nn.Linear((rumor_feature_dim + GCN_hidden_dim) * 2, rumor_tag_num).to(self.device)
+        self.fc = nn.Linear((rumor_feature_dim + GCN_hidden_dim) * 2, (rumor_feature_dim + GCN_hidden_dim)).to(self.device)
+        self.feature2label = nn.Linear((rumor_feature_dim + GCN_hidden_dim), rumor_tag_num).to(self.device)
 
     def forward(self, node_token, edge_index_TD, edge_index_BU, root_index):        
         '''
@@ -85,6 +86,7 @@ class BertBiGCNOnlyRumor(nn.Module):
         )
         rumorFeature = self.biGCN(dataTD, dataBU)
 
+        rumorFeature = torch.tanh(self.fc(rumorFeature))
         return self.feature2label(rumorFeature)
 
     def set_device(self, device: torch.device) -> torch.nn.Module:
@@ -112,8 +114,8 @@ class BertMSA(nn.Module):
         self,
         bert_model: BertModel, 
         embedding_dim: int,
-        numStanceTag: int, # 立场标签种类数
-        s2vAttentionHeads = 8, # sentence2vec multi-head attention中使用的头数
+        num_stance_tag: int, # 立场标签种类数
+        s2v_attention_heads = 8, # sentence2vec multi-head attention中使用的头数
         batch_first = True,
         dropout = 0.0, # 模型默认使用的drop out概率
         device = torch.device('cuda')
@@ -121,9 +123,9 @@ class BertMSA(nn.Module):
         super().__init__()
         self.bert_model = bert_model
         self.embedding_dim = embedding_dim
-        self.numStanceTag = numStanceTag
+        self.num_stance_tag = num_stance_tag
         self.batch_first = batch_first
-        self.s2vAttentionHeads = s2vAttentionHeads
+        self.s2v_attention_heads = s2v_attention_heads
         self.dropout = dropout
         self.device = device
 
@@ -133,11 +135,11 @@ class BertMSA(nn.Module):
         self.s2vStance = nn.Linear(self.embedding_dim, self.embedding_dim).to(self.device)
         self.stanceAttention = nn.MultiheadAttention(
             embed_dim = self.embedding_dim,
-            num_heads = s2vAttentionHeads,
+            num_heads = s2v_attention_heads,
             dropout = dropout,
             batch_first = True
         ).to(self.device)
-        self.feature2label = nn.Linear(self.embedding_dim, numStanceTag).to(self.device)
+        self.feature2label = nn.Linear(self.embedding_dim, num_stance_tag).to(self.device)
 
     # 根据输入的任务标识进行前向迭代，
     def forward(self, node_token):
@@ -177,45 +179,32 @@ class BertMSA(nn.Module):
 class BertBiGCN(nn.Module):
     def __init__(
         self,
-        word2vec, # 预训练词向量
-        word2index, # 词-下表映射
-        s2vDim: int, # 使用的句嵌入的维度
+        bert_model: BertModel, 
+        embedding_dim: int,
         GCN_hidden_dim: int, # GCN隐藏层的维度（GCNconv1的输出维度）
         rumor_feature_dim: int, # GCN输出层的维度
         rumor_tag_num: int, # 谣言标签种类数
-        numStanceTag: int, # 立场标签种类数
-        w2vAttentionHeads = 5, # word2vec multi-head attention中使用的头数
-        s2vAttentionHeads = 8, # sentence2vec multi-head attention中使用的头数
-        needStance = True, # 是否结合stance的特征进GCN里
+        num_stance_tag: int, # 立场标签种类数
+        s2v_attention_heads = 8, # sentence2vec multi-head attention中使用的头数
+        batch_first = True,
+        need_stance = False,
         dropout = 0.0, # 模型默认使用的drop out概率
-        edge_drop_rate = 0.2,
-        batch_first = True
+        edge_drop_rate = 0.1,
+        device = torch.device('cuda')
     ):
         super().__init__()
-        self.device = 'cpu'
-        self.s2vDim = s2vDim
+        self.device = device
         self.GCN_hidden_dim = GCN_hidden_dim
         self.rumor_feature_dim = rumor_feature_dim
         self.rumor_tag_num = rumor_tag_num
-        self.numStanceTag = numStanceTag
+        self.num_stanc_tag = num_stance_tag
         self.batch_first = batch_first
-        self.batchSize = 1 # 实际上，由于不会写支持batch化的GCN，我们把1个thread视作1个batch
-        self.w2vAttentionHeads = w2vAttentionHeads
-        self.s2vAttentionHeads = s2vAttentionHeads
-        self.needStance = needStance
+        self.s2v_attention_heads = s2v_attention_heads
+        self.needStance = need_stance
         self.dropout = dropout
         self.edge_drop_rate = edge_drop_rate
 
-        # 使用预训练word2vec初始化embed层的参数
-        self.w2vDim = word2vec.vector_size
-        weight = torch.zeros(len(word2index) + 1, self.w2vDim) # 留出0号位置给pad
-        for i in range(len(word2vec.index_to_key)):
-            try:
-                index = word2index[word2vec.index_to_key[i]]
-            except:
-                continue
-            weight[index] = torch.FloatTensor(word2vec[word2vec.index_to_key[i]].tolist())
-        self.embed = nn.Embedding.from_pretrained(weight, freeze = False, padding_idx = 0)
+        self.bert_model = bert_model.to(self.device)
         
         # sentence embed模块
         self.wordAttention = nn.MultiheadAttention(
@@ -255,6 +244,14 @@ class BertBiGCN(nn.Module):
         )
         self.stanceFc = nn.Linear(self.s2vDim, self.s2vDim)
         self.f2tStance = nn.Linear(self.s2vDim, numStanceTag)
+        
+        self.s2vStance = nn.Linear(self.embedding_dim, self.embedding_dim).to(self.device)
+        self.stanceAttention = nn.MultiheadAttention(
+            embed_dim = self.embedding_dim,
+            num_heads = s2v_attention_heads,
+            dropout = dropout,
+            batch_first = True
+        ).to(self.device)
 
     # 根据输入的任务标识进行前向迭代，
     def forward(self, thread):

@@ -4,7 +4,7 @@ from torch.nn.functional import softmax
 from torch.utils.data import DataLoader, random_split
 import argparse
 import numpy as np
-from MSABiGCN import BertBiGCNOnlyRumor
+from BertBiGCN import BertBiGCNOnlyRumor
 from transformers import BertTokenizer, BertModel
 from rumorDataset import RumorDataset
 from sklearn.metrics import f1_score
@@ -14,17 +14,17 @@ from time import process_time
 import json
 import logging
 
-parser = argparse.ArgumentParser(description="Training script for ABGCN")
+parser = argparse.ArgumentParser()
 
 # model hyperparameters
 parser.add_argument('--bert_path' ,type=str, default='../model/bert-base-cased',\
                     help="path to bert model, default: '../model/bert-base-cased'")
 parser.add_argument('--embedding_dim' ,type=int, default=768,\
                     help='dimention of sentence2vec(get from lstm/attention)')
-parser.add_argument('--GCN_hidden_dim', type=int, default=384,\
-                    help='dimention of GCN hidden layer, default: 384')
-parser.add_argument('--rumor_feature_dim', type=int, default=384,\
-                    help='dimention of GCN output, default: 384')
+parser.add_argument('--GCN_hidden_dim', type=int, default=768,\
+                    help='dimention of GCN hidden layer, default: 768')
+parser.add_argument('--rumor_feature_dim', type=int, default=768,\
+                    help='dimention of GCN output, default: 768')
 parser.add_argument('--dropout', type=float, default=0.1,\
                     help='dropout rate for model, default: 0.1')
 # dataset parameters
@@ -33,14 +33,14 @@ parser.add_argument('--data_path', type=str, default='../datasets/PHEME/',\
 # train parameters
 parser.add_argument('--optimizer', type=str, default='AdamW',\
                     help='set optimizer type in [SGD/Adam/AdamW...], default: AdamW')
-parser.add_argument('--lr', type=float, default=1e-4,\
-                    help='set learning rate, default: 1e-4')
+parser.add_argument('--lr', type=float, default=2e-5,\
+                    help='set learning rate, default: 2e-5')
 parser.add_argument('--weightDecay', type=float, default=5e-4,\
                     help='set weight decay for L2 Regularization, default: 5e-4')
-parser.add_argument('--epoch', type=int, default=100,\
-                    help='epoch to train, default: 100')
-parser.add_argument('--patience', type=int, default=50,\
-                    help='epoch to stop training, default: 50')
+parser.add_argument('--epoch', type=int, default=20,\
+                    help='epoch to train, default: 20')
+parser.add_argument('--patience', type=int, default=5,\
+                    help='epoch to stop training, default: 5')
 parser.add_argument('--device', type=str, default='cuda',\
                     help='select device(cuda/cpu), default: cuda')
 parser.add_argument('--log_file', type=str, default='../log/log-only-rumor.txt',\
@@ -150,7 +150,7 @@ def main():
     devRumorF1 = []
     devLoss = []
 
-    epochTime = []
+    # epochTime = []
 
     for epoch in range(start, args.epoch + 1):
         logging.info('[epoch: {:d}] '.format(epoch))
@@ -161,7 +161,7 @@ def main():
         totalLoss = 0.
         
         model.train()
-        startTime = process_time()
+        # startTime = process_time()
         for node_token, edge_index_TD, edge_index_BU, root_index, label in tqdm(
             train_loader, 
             desc="[epoch: {:d}, training] ".format(epoch), 
@@ -223,7 +223,7 @@ def main():
                 totalLoss += loss
 
                 result = softmax(result, dim=1)
-            rumorPredict += result.max(dim=1)[1].tolist()
+                rumorPredict += result.max(dim=1)[1].tolist()
 
         macroF1 = f1_score(rumorTruth, rumorPredict, labels=range(len(category)), average='macro')
         acc = (np.array(rumorTruth) == np.array(rumorPredict)).sum() / len(rumorPredict)
@@ -296,7 +296,7 @@ def main():
             totalLoss += loss
 
             result = softmax(result, dim=1)
-        rumorPredict += result.max(dim=1)[1].tolist()
+            rumorPredict += result.max(dim=1)[1].tolist()
 
     macroF1 = f1_score(rumorTruth, rumorPredict, labels=range(len(category)), average='macro')
     accRumor = (np.array(rumorTruth) == np.array(rumorPredict)).sum() / len(rumorPredict)
