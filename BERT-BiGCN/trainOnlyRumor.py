@@ -20,7 +20,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--bert_path' ,type=str, default='../model/bert-base-cased',\
                     help="path to bert model, default: '../model/bert-base-cased'")
 parser.add_argument('--embedding_dim' ,type=int, default=768,\
-                    help='dimention of sentence2vec(get from lstm/attention)')
+                    help='dimention of embedding')
 parser.add_argument('--GCN_hidden_dim', type=int, default=768,\
                     help='dimention of GCN hidden layer, default: 768')
 parser.add_argument('--rumor_feature_dim', type=int, default=768,\
@@ -33,8 +33,8 @@ parser.add_argument('--data_path', type=str, default='../datasets/PHEME/',\
 # train parameters
 parser.add_argument('--optimizer', type=str, default='AdamW',\
                     help='set optimizer type in [SGD/Adam/AdamW...], default: AdamW')
-parser.add_argument('--lr', type=float, default=2e-5,\
-                    help='set learning rate, default: 2e-5')
+parser.add_argument('--lr', type=float, default=1e-5,\
+                    help='set learning rate, default: 1e-5')
 parser.add_argument('--weightDecay', type=float, default=5e-4,\
                     help='set weight decay for L2 Regularization, default: 5e-4')
 parser.add_argument('--epoch', type=int, default=20,\
@@ -44,9 +44,9 @@ parser.add_argument('--patience', type=int, default=5,\
 parser.add_argument('--device', type=str, default='cuda',\
                     help='select device(cuda/cpu), default: cuda')
 parser.add_argument('--log_file', type=str, default='../log/log-only-rumor.txt',\
-                    help='log file name, default: ../log/log.txt')
-parser.add_argument('--savePath', type=str, default='../model/best.pt',\
-                    help='path to save model, default: ../model/best.pt')
+                    help='log file name, default: ../log/log-only-rumor.txt')
+parser.add_argument('--savePath', type=str, default='../model/best-only-rumor.pt',\
+                    help='path to save model, default: ../model/best-only-rumor.pt')
 
 def main():
     args = parser.parse_args()
