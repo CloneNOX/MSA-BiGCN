@@ -30,8 +30,8 @@ parser.add_argument('--AttentionHeads', type=int, default=8,\
                     help='heads of multi-heads self-attention in sentence2vec layer, default: 8')
 parser.add_argument('--dropout', type=float, default=0.1,\
                     help='dropout rate for model, default: 0.1')
-parser.add_argument('--need_stance', type=str, default='True',\
-                    help='whether use stance feature in rumor detection, default: True')
+parser.add_argument('--need_stance', type=int, default='1',\
+                    help='whether use stance feature in rumor detection, default: 1')
 # dataset parameters
 parser.add_argument('--data_path', type=str, default='../datasets/semeval2017-task8/',\
                     help='path to training dataset, default: ../datasets/semeval2017-task8/')
@@ -42,8 +42,8 @@ parser.add_argument('--lr', type=float, default=1e-5,\
                     help='set learning rate, default: 1e-5')
 parser.add_argument('--weightDecay', type=float, default=5e-4,\
                     help='set weight decay for L2 Regularization, default: 5e-4')
-parser.add_argument('--epoch', type=int, default=20,\
-                    help='epoch to train, default: 100')
+parser.add_argument('--epoch', type=int, default=40,\
+                    help='epoch to train, default: 40')
 parser.add_argument('--patience', type=int, default=5,\
                     help='epoch to stop training, default: 5')
 parser.add_argument('--device', type=str, default='cuda',\
@@ -117,7 +117,8 @@ def main():
         GCN_hidden_dim = args.GCN_hidden_dim, # GCN隐藏层的维度（GCNconv1的输出维度）
         rumor_feature_dim = args.rumor_feature_dim, # GCN输出层的维度
         rumor_label_num = len(rumor_category),
-        stance_label_num = len(stance_category)
+        stance_label_num = len(stance_category),
+        need_stance = bool(args.need_stance)
     )
     model = model.set_device(device)
     logging.info(model.__str__())
@@ -147,8 +148,8 @@ def main():
     earlyStopCounter = 0
     maxRumorF1Train = 0.
     maxStanceF1Train = 0.
-    maxRumorF1Dev = 0.
-    maxStanceF1Dev = 0.
+    savedRumorF1Dev = 0.
+    savedStanceF1Dev = 0.
 
     trainRumorAcc = []
     trainRumorF1 = []
@@ -205,7 +206,7 @@ def main():
         ))
         trainLoss.append((totalLoss / len(train_loader)).item())
 
-        macroF1 = f1_score(rumorTruth, rumorPredict, labels=len(rumor_category), average='macro')
+        macroF1 = f1_score(rumorTruth, rumorPredict, labels=range(len(rumor_category)), average='macro')
         acc = (np.array(rumorTruth) == np.array(rumorPredict)).sum() / len(rumorTruth)
         logging.info("    rumor detection accuracy: {:.4f}, macro-f1: {:.4f}".format(
             acc,
@@ -214,9 +215,9 @@ def main():
         trainRumorAcc.append(acc)
         trainRumorF1.append(macroF1)
 
-        macroF1 = f1_score(stanceTruth, stancePredict, labels=len(stance_category), average='macro')
+        macroF1 = f1_score(stanceTruth, stancePredict, labels=range(len(stance_category)), average='macro')
         acc = (np.array(stanceTruth) == np.array(stancePredict)).sum() / len(stanceTruth)
-        logging.info("    stance classification accuracy: {:.4f}, macro-f1: {:.4f}\n".format(
+        logging.info("    stance classification accuracy: {:.4f}, macro-f1: {:.4f}".format(
             acc,
             macroF1
         ))
@@ -249,7 +250,7 @@ def main():
                 stanceTruth += stance_label.tolist()
                 
                 rumorResult, stanceResult = model.forward(node_token, edge_index_TD, edge_index_BU, root_index)
-                loss = loss_func(rumorResult, rumorTruth) + loss_func(stanceResult, stanceTruth)
+                loss = loss_func(rumorResult, rumor_label) + loss_func(stanceResult, stance_label)
                 totalLoss += loss
 
                 rumorResult = softmax(rumorResult, dim=1)
@@ -257,18 +258,18 @@ def main():
                 stanceResult = softmax(stanceResult, dim=1)
                 stancePredict += stanceResult.max(dim=1)[1].tolist()
         
-        macroF1Rumor = f1_score(rumorTruth, rumorPredict, labels=len(rumor_category), average='macro')
+        macroF1Rumor = f1_score(rumorTruth, rumorPredict, labels=range(len(rumor_category)), average='macro')
         accRumor = (np.array(rumorTruth) == np.array(rumorPredict)).sum() / len(rumorTruth)
-        macroF1Stance = f1_score(stanceTruth, stancePredict, labels=(stance_category), average='macro')
-        accStance = (np.array(rumorTruth) == np.array(rumorPredict)).sum() / len(stanceTruth)
+        macroF1Stance = f1_score(stanceTruth, stancePredict, labels=range(len(stance_category)), average='macro')
+        accStance = (np.array(stanceTruth) == np.array(stancePredict)).sum() / len(stanceTruth)
             
         #==============================================
         # 保存验证集marco F1和最大时的模型
         if accept(
             newRumorF1 = macroF1Rumor,
-            savedRumorF1 = maxRumorF1Dev,
+            savedRumorF1 = savedRumorF1Dev,
             newStanceF1 = macroF1Stance,
-            savedStanceF1 = maxStanceF1Dev,
+            savedStanceF1 = savedStanceF1Dev,
             threshold = args.acceptThreshold
         ):
             model.save(args.savePath)
@@ -281,25 +282,25 @@ def main():
                 'accStance': accStance,
                 'loss': (totalLoss / len(dev_loader)).item()
             }
-            maxRumorF1Dev = maxRumorF1Dev
-            maxStanceF1Dev = maxStanceF1Dev
+            savedRumorF1Dev = macroF1Rumor
+            savedStanceF1Dev = macroF1Stance
             logging.info('saved model')
         else:
             earlyStopCounter += 1
         #==============================================
-        logging.info('average joint-loss: {:f}\n'.format(totalLoss / len(dev_loader)))
-        logging.info('rumor detection:\n')
-        logging.info('accuracy: {:f}, macro-f1: {:f}\n'.format(
+        logging.info('average joint-loss: {:f}'.format(totalLoss / len(dev_loader)))
+        logging.info('rumor detection:')
+        logging.info('accuracy: {:f}, macro-f1: {:f}'.format(
             accRumor, 
             macroF1Rumor
         ))
-        logging.info('stance analyze:\n')
-        logging.info('accuracy: {:f}, macro-f1: {:f}\n'.format(
+        logging.info('stance analyze:')
+        logging.info('accuracy: {:f}, macro-f1: {:f}'.format(
             accStance,
             macroF1Stance
         ))
-        logging.info('early stop counter: {:d}\n'.format(earlyStopCounter))
-        logging.info('========================================\n')
+        logging.info('early stop counter: {:d}'.format(earlyStopCounter))
+        logging.info('========================================')
         devLoss.append((totalLoss / len(dev_loader)).item())
         devRumorAcc.append(accRumor)
         devRumorF1.append(macroF1Rumor)
@@ -333,7 +334,48 @@ def main():
     #     f.write(json.dumps(saveStatus))
 
     # 在测试集测试
+    rumorTruth = []
+    rumorPredict = []
+    stanceTruth = []
+    stancePredict = []
+    totalLoss = 0.
+    logging.info('test model on test set')
+    model.eval()
+    for node_token, edge_index_TD, edge_index_BU, root_index, rumor_label, stance_label in tqdm(
+        test_loader, 
+        desc="[test set test]", 
+        leave=False, 
+        ncols=80
+    ):
+        with torch.no_grad():
+            rumor_label = rumor_label.to(device)
+            rumorTruth += rumor_label.tolist()
+            stance_label = stance_label.to(device)
+            stanceTruth += stance_label.tolist()
+            
+            rumorResult, stanceResult = model.forward(node_token, edge_index_TD, edge_index_BU, root_index)
+            loss = loss_func(rumorResult, rumor_label) + loss_func(stanceResult, stance_label)
+            totalLoss += loss
 
+            rumorResult = softmax(rumorResult, dim=1)
+            rumorPredict += rumorResult.max(dim=1)[1].tolist()
+            stanceResult = softmax(stanceResult, dim=1)
+            stancePredict += stanceResult.max(dim=1)[1].tolist()
+    macroF1Rumor = f1_score(rumorTruth, rumorPredict, labels=range(len(rumor_category)), average='macro')
+    accRumor = (np.array(rumorTruth) == np.array(rumorPredict)).sum() / len(rumorTruth)
+    macroF1Stance = f1_score(stanceTruth, stancePredict, labels=range(len(stance_category)), average='macro')
+    accStance = (np.array(stanceTruth) == np.array(stancePredict)).sum() / len(stanceTruth)
+    logging.info('average joint-loss: {:f}'.format(totalLoss / len(dev_loader)))
+    logging.info('rumor detection:')
+    logging.info('accuracy: {:f}, macro-f1: {:f}'.format(
+        accRumor, 
+        macroF1Rumor
+    ))
+    logging.info('stance analyze:')
+    logging.info('accuracy: {:f}, macro-f1: {:f}'.format(
+        accStance,
+        macroF1Stance
+    ))
 
 # end main()
 

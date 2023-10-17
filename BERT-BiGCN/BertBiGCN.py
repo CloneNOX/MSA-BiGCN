@@ -220,9 +220,8 @@ class BertBiGCN(nn.Module):
         self.biGCN = BiGCN(
             self.embedding_dim, 
             self.GCN_hidden_dim, 
-            self.rumor_feature_dim, 
-            self.rumor_label_num, 
-            numLayers = 2,
+            self.rumor_feature_dim,
+            num_layers = 2,
             dropout = dropout
         ).to(self.device)
         self.fcRumor = nn.Linear((rumor_feature_dim + GCN_hidden_dim) * 2, (rumor_feature_dim + GCN_hidden_dim)).to(self.device)
@@ -266,7 +265,7 @@ class BertBiGCN(nn.Module):
         # rumor detection:
         s2v = []
         for post in sentence_embedding:
-            s2v.append(post[0])
+            s2v.append(post)
         s2v = torch.stack(s2v, dim = 0)
         # rumor detection的预测需要结合stance feature
         if self.need_stance:
