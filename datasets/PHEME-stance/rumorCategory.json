@@ -1,0 +1,6 @@
+{
+    "non-rumor": 0,
+    "true": 1,
+    "false": 2,
+    "unverified": 3
+}

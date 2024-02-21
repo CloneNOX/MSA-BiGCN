@@ -1,0 +1,6 @@
+{
+    "support": 0,
+    "query": 1,
+    "deny": 2,
+    "comment": 3
+}
