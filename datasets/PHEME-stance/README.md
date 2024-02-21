@@ -54,10 +54,10 @@ https://figshare.com/articles/dataset/PHEME_dataset_of_rumours_and_non-rumours/4
 
 - `posts_label.txt`：所有post的立场label，已转换成
 
-```text
-'support': 0,
-'query': 1,
-'deny': 2,
-'comment': 3
-```
+	```text
+	'support': 0,
+	'query': 1,
+	'deny': 2,
+	'comment': 3
+	```
 
