@@ -160,3 +160,4 @@ DualHierarchicalTransformer/
 MT/
 BiGCN/
 *.xlsx
+train.sh
