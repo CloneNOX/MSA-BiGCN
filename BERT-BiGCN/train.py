@@ -7,7 +7,7 @@ import numpy as np
 from BertBiGCN import BertBiGCN
 from transformers import BertTokenizer, BertModel
 from rumorDataset import RumorStanceDataset
-from sklearn.metrics import f1_score
+from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
 from tqdm import tqdm
 from copy import copy
 from time import process_time
@@ -206,20 +206,32 @@ def main():
         ))
         trainLoss.append((totalLoss / len(train_loader)).item())
 
+        # acc = (np.array(rumorTruth) == np.array(rumorPredict)).sum() / len(rumorTruth)
+        acc = accuracy_score(rumorTruth, rumorPredict)
         macroF1 = f1_score(rumorTruth, rumorPredict, labels=range(len(rumor_category)), average='macro')
-        acc = (np.array(rumorTruth) == np.array(rumorPredict)).sum() / len(rumorTruth)
-        logging.info("    rumor detection accuracy: {:.4f}, macro-f1: {:.4f}".format(
+        precision = precision_score(rumorTruth, rumorPredict, labels=range(len(rumor_category)), average='macro')
+        recall = recall_score(rumorTruth, rumorPredict, labels=range(len(rumor_category)), average='macro')
+        
+        logging.info("    rumor detection accuracy: {:.4f}, macro-f1: {:.4f}, precision: {:.4f}, recall: {:.4f}".format(
             acc,
-            macroF1
+            macroF1,
+            precision,
+            recall
         ))
         trainRumorAcc.append(acc)
         trainRumorF1.append(macroF1)
 
+        # acc = (np.array(stanceTruth) == np.array(stancePredict)).sum() / len(stanceTruth)
+        acc = accuracy_score(stanceTruth, stancePredict)
         macroF1 = f1_score(stanceTruth, stancePredict, labels=range(len(stance_category)), average='macro')
-        acc = (np.array(stanceTruth) == np.array(stancePredict)).sum() / len(stanceTruth)
-        logging.info("    stance classification accuracy: {:.4f}, macro-f1: {:.4f}".format(
+        precision = precision_score(stanceTruth, stancePredict, labels=range(len(stance_category)), average='macro')
+        recall = recall_score(stanceTruth, stancePredict, labels=range(len(stance_category)), average='macro')
+        
+        logging.info("    stance classification accuracy: {:.4f}, macro-f1: {:.4f}, precision: {:.4f}, recall: {:.4f}".format(
             acc,
-            macroF1
+            macroF1,
+            precision,
+            recall
         ))
         trainStanceAcc.append(acc)
         trainStanceF1.append(macroF1)
@@ -258,10 +270,15 @@ def main():
                 stanceResult = softmax(stanceResult, dim=1)
                 stancePredict += stanceResult.max(dim=1)[1].tolist()
         
+        accRumor = accuracy_score(rumorTruth, rumorPredict)
         macroF1Rumor = f1_score(rumorTruth, rumorPredict, labels=range(len(rumor_category)), average='macro')
-        accRumor = (np.array(rumorTruth) == np.array(rumorPredict)).sum() / len(rumorTruth)
+        precisionRumor = precision_score(rumorTruth, rumorPredict, labels=range(len(rumor_category)), average='macro')
+        recallRumor = recall_score(rumorTruth, rumorPredict, labels=range(len(rumor_category)), average='macro')
+
+        accStance = accuracy_score(stanceTruth, stancePredict)
         macroF1Stance = f1_score(stanceTruth, stancePredict, labels=range(len(stance_category)), average='macro')
-        accStance = (np.array(stanceTruth) == np.array(stancePredict)).sum() / len(stanceTruth)
+        precicionStance = precision_score(stanceTruth, stancePredict, labels=range(len(stance_category)), average='macro')
+        recallStance = recall_score(stanceTruth, stancePredict, labels=range(len(stance_category)), average='macro')
             
         #==============================================
         # 保存验证集marco F1和最大时的模型
@@ -280,6 +297,10 @@ def main():
                 'macroF1Stance': macroF1Stance,
                 'accRumor': accRumor,
                 'accStance': accStance,
+                'precisionRumor': precisionRumor,
+                'precisionStance': precicionStance,
+                'recallRumor': recallRumor,
+                'recallRumor': recallStance,
                 'loss': (totalLoss / len(dev_loader)).item()
             }
             savedRumorF1Dev = macroF1Rumor
@@ -290,14 +311,18 @@ def main():
         #==============================================
         logging.info('average joint-loss: {:f}'.format(totalLoss / len(dev_loader)))
         logging.info('rumor detection:')
-        logging.info('accuracy: {:f}, macro-f1: {:f}'.format(
+        logging.info('accuracy: {:f}, macro-f1: {:f}, precision: {:.4f}, recall: {:.4f}'.format(
             accRumor, 
-            macroF1Rumor
+            macroF1Rumor,
+            precisionRumor,
+            recallRumor
         ))
         logging.info('stance analyze:')
-        logging.info('accuracy: {:f}, macro-f1: {:f}'.format(
+        logging.info('accuracy: {:f}, macro-f1: {:f}, precision: {:.4f}, recall: {:.4f}'.format(
             accStance,
-            macroF1Stance
+            macroF1Stance,
+            precicionStance,
+            recallStance
         ))
         logging.info('early stop counter: {:d}'.format(earlyStopCounter))
         logging.info('========================================')
@@ -361,20 +386,33 @@ def main():
             rumorPredict += rumorResult.max(dim=1)[1].tolist()
             stanceResult = softmax(stanceResult, dim=1)
             stancePredict += stanceResult.max(dim=1)[1].tolist()
+    # macroF1Rumor = f1_score(rumorTruth, rumorPredict, labels=range(len(rumor_category)), average='macro')
+    # accRumor = (np.array(rumorTruth) == np.array(rumorPredict)).sum() / len(rumorTruth)
+    # macroF1Stance = f1_score(stanceTruth, stancePredict, labels=range(len(stance_category)), average='macro')
+    # accStance = (np.array(stanceTruth) == np.array(stancePredict)).sum() / len(stanceTruth)
+    accRumor = accuracy_score(rumorTruth, rumorPredict)
     macroF1Rumor = f1_score(rumorTruth, rumorPredict, labels=range(len(rumor_category)), average='macro')
-    accRumor = (np.array(rumorTruth) == np.array(rumorPredict)).sum() / len(rumorTruth)
+    precisionRumor = precision_score(rumorTruth, rumorPredict, labels=range(len(rumor_category)), average='macro')
+    recallRumor = recall_score(rumorTruth, rumorPredict, labels=range(len(rumor_category)), average='macro')
+
+    accStance = accuracy_score(stanceTruth, stancePredict)
     macroF1Stance = f1_score(stanceTruth, stancePredict, labels=range(len(stance_category)), average='macro')
-    accStance = (np.array(stanceTruth) == np.array(stancePredict)).sum() / len(stanceTruth)
+    precicionStance = precision_score(stanceTruth, stancePredict, labels=range(len(stance_category)), average='macro')
+    recallStance = recall_score(stanceTruth, stancePredict, labels=range(len(stance_category)), average='macro')
     logging.info('average joint-loss: {:f}'.format(totalLoss / len(dev_loader)))
     logging.info('rumor detection:')
-    logging.info('accuracy: {:f}, macro-f1: {:f}'.format(
+    logging.info('accuracy: {:f}, macro-f1: {:f}, precision: {:.4f}, recall: {:.4f}'.format(
         accRumor, 
-        macroF1Rumor
+        macroF1Rumor,
+        precisionRumor,
+        recallRumor
     ))
     logging.info('stance analyze:')
-    logging.info('accuracy: {:f}, macro-f1: {:f}'.format(
+    logging.info('accuracy: {:f}, macro-f1: {:f}, precision: {:.4f}, recall: {:.4f}'.format(
         accStance,
-        macroF1Stance
+        macroF1Stance,
+        precicionStance,
+        recallStance
     ))
 
 # end main()

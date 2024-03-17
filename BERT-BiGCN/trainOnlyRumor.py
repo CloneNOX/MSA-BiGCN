@@ -7,7 +7,7 @@ import numpy as np
 from BertBiGCN import BertBiGCNOnlyRumor
 from transformers import BertTokenizer, BertModel
 from rumorDataset import RumorDataset
-from sklearn.metrics import f1_score
+from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
 from tqdm import tqdm
 from copy import copy
 from time import process_time
@@ -187,11 +187,17 @@ def main():
         ))
         trainLoss.append((totalLoss / len(train_loader)).item())
         
+        # acc = (np.array(rumorTruth) == np.array(rumorPredict)).sum() / len(rumorTruth)
+        acc = accuracy_score(rumorTruth, rumorPredict)
         macroF1 = f1_score(rumorTruth, rumorPredict, labels=range(len(category)), average='macro')
-        acc = (np.array(rumorTruth) == np.array(rumorPredict)).sum() / len(rumorTruth)
-        logging.info("    rumor detection accuracy: {:.4f}, macro-f1: {:.4f}".format(
+        precision = precision_score(rumorTruth, rumorPredict, labels=range(len(category)), average='macro')
+        recall = recall_score(rumorTruth, rumorPredict, labels=range(len(category)), average='macro')
+        
+        logging.info("    rumor detection accuracy: {:.4f}, macro-f1: {:.4f}, precision: {:.4f}, recall: {:.4f}".format(
             acc,
-            macroF1
+            macroF1,
+            precision,
+            recall
         ))
         trainRumorAcc.append(acc)
         trainRumorF1.append(macroF1)
@@ -225,8 +231,11 @@ def main():
                 result = softmax(result, dim=1)
                 rumorPredict += result.max(dim=1)[1].tolist()
 
+        # acc = (np.array(rumorTruth) == np.array(rumorPredict)).sum() / len(rumorTruth)
+        acc = accuracy_score(rumorTruth, rumorPredict)
         macroF1 = f1_score(rumorTruth, rumorPredict, labels=range(len(category)), average='macro')
-        acc = (np.array(rumorTruth) == np.array(rumorPredict)).sum() / len(rumorPredict)
+        precision = precision_score(rumorTruth, rumorPredict, labels=range(len(category)), average='macro')
+        recall = recall_score(rumorTruth, rumorPredict, labels=range(len(category)), average='macro')
             
         #==============================================
         # 保存验证集marco F1和最大时的模型
@@ -237,6 +246,8 @@ def main():
                 'epoch': epoch,
                 'macroF1Rumor': macroF1,
                 'accRumor': acc,
+                'precisionRumor': precision,
+                'recallRumor': recall,
                 'loss': (totalLoss / len(dev_loader)).item()
             }
             maxF1Dev = max(maxF1Dev, macroF1)
@@ -245,9 +256,11 @@ def main():
             earlyStopCounter += 1
         #==============================================
         logging.info('average loss: {:f}'.format(totalLoss / len(dev_loader)))
-        logging.info('    rumor detection: accuracy: {:f}, macro-f1: {:f}'.format(
+        logging.info('    rumor detection: accuracy: {:f}, macro-f1: {:f}, precision: {:.4f}, recall: {:.4f}'.format(
             acc, 
-            macroF1
+            macroF1,
+            precision,
+            recall
         ))
         logging.info('early stop counter: {:d}'.format(earlyStopCounter))
         logging.info('========================================')
@@ -298,12 +311,17 @@ def main():
             result = softmax(result, dim=1)
             rumorPredict += result.max(dim=1)[1].tolist()
 
+    # acc = (np.array(rumorTruth) == np.array(rumorPredict)).sum() / len(rumorTruth)
+    accRumor = accuracy_score(rumorTruth, rumorPredict)
     macroF1 = f1_score(rumorTruth, rumorPredict, labels=range(len(category)), average='macro')
-    accRumor = (np.array(rumorTruth) == np.array(rumorPredict)).sum() / len(rumorPredict)
+    precision = precision_score(rumorTruth, rumorPredict, labels=range(len(category)), average='macro')
+    recall = recall_score(rumorTruth, rumorPredict, labels=range(len(category)), average='macro')
     logging.info('average loss: {:f}'.format(totalLoss / len(dev_loader)))
-    logging.info('rumor detection: accuracy: {:f}, macro-f1: {:f}'.format(
+    logging.info('rumor detection: accuracy: {:f}, macro-f1: {:f}, precision: {:.4f}, recall: {:.4f}'.format(
         accRumor, 
-        macroF1
+        macroF1,
+        precision,
+        recall
     ))
 # end main()
 
